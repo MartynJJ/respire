@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Breathwork">
+  <meta name="theme-color" content="#667eea">
+  <title>Breathwork Timer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Breathwork Timer</h1>
+      <button id="btn-mute" class="mute-btn" title="Toggle audio">🔊</button>
+    </header>
+
+    <main id="stage-panel" class="stage-panel">
+      <!-- IDLE state -->
+      <div id="stage-idle" class="stage idle">
+        <h2>Ready to begin?</h2>
+        <p>This session will guide you through 3 rounds of breathwork.</p>
+        <div class="config-group">
+          <label for="rounds-input">Number of rounds:</label>
+          <input id="rounds-input" type="number" min="1" max="10" value="3">
+        </div>
+        <button id="btn-primary" class="btn-primary">Start</button>
+      </div>
+
+      <!-- BREATHING state -->
+      <div id="stage-breathing" class="stage breathing hidden">
+        <div class="round-badge" id="round-badge"></div>
+        <div id="circle" class="circle"></div>
+        <div class="breathing-info">
+          <div class="breathing-label" id="breathing-label">INHALE</div>
+          <div class="breath-counter" id="breath-counter">0 / 30</div>
+        </div>
+      </div>
+
+      <!-- HOLD state -->
+      <div id="stage-hold" class="stage hold hidden">
+        <div class="round-badge" id="hold-round-badge"></div>
+        <h2>Retention Hold</h2>
+        <p>Exhale fully and hold your breath.</p>
+        <div class="timer-display" id="hold-timer">0:00</div>
+        <button id="btn-primary" class="btn-primary hidden">Start Hold</button>
+        <button id="btn-done" class="btn-primary hidden">Done</button>
+      </div>
+
+      <!-- RECOVERY state -->
+      <div id="stage-recovery" class="stage recovery hidden">
+        <div class="round-badge" id="recovery-round-badge"></div>
+        <h2>Recovery Breath</h2>
+        <p>Inhale deeply and hold for 15 seconds.</p>
+        <div class="timer-display" id="recovery-timer">0:15</div>
+      </div>
+
+      <!-- COMPLETE state -->
+      <div id="stage-complete" class="stage complete hidden">
+        <h2>Session Complete!</h2>
+        <div class="session-summary" id="session-summary"></div>
+        <button id="btn-primary" class="btn-primary">Save & View Logs</button>
+      </div>
+    </main>
+
+    <details class="logs-section">
+      <summary>Session History</summary>
+      <div id="logs-panel" class="logs-panel">
+        <table id="logs-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Hold Times</th>
+            </tr>
+          </thead>
+          <tbody id="logs-tbody"></tbody>
+        </table>
+        <button id="btn-clear-logs" class="btn-secondary">Clear History</button>
+      </div>
+    </details>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

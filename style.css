@@ -1,0 +1,576 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #333;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.container {
+  background: white;
+  border-radius: 20px;
+  padding: 40px;
+  max-width: 600px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 40px;
+}
+
+header h1 {
+  font-size: 28px;
+  color: #667eea;
+}
+
+.mute-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.mute-btn:hover {
+  background: #f0f0f0;
+}
+
+.mute-btn.muted {
+  opacity: 0.5;
+}
+
+.stage-panel {
+  min-height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stage {
+  width: 100%;
+  text-align: center;
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.stage.hidden {
+  display: none;
+}
+
+/* IDLE */
+.stage.idle h2 {
+  margin-bottom: 20px;
+  color: #667eea;
+}
+
+.stage.idle p {
+  margin-bottom: 30px;
+  color: #666;
+  font-size: 16px;
+}
+
+.config-group {
+  margin: 30px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+}
+
+.config-group label {
+  font-weight: 500;
+}
+
+.config-group input {
+  width: 80px;
+  padding: 8px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 16px;
+  text-align: center;
+}
+
+.config-group input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+/* BREATHING */
+.breathing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 30px;
+}
+
+.round-badge {
+  background: #667eea;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  align-self: flex-start;
+}
+
+.circle {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: breathe 5s infinite;
+  box-shadow: 0 10px 40px rgba(102, 126, 234, 0.4);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@keyframes breathe {
+  0%, 100% {
+    transform: scale(0.8);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+}
+
+.breathing-info {
+  width: 100%;
+}
+
+.breathing-label {
+  font-size: 24px;
+  font-weight: 700;
+  color: #667eea;
+  margin-bottom: 10px;
+  letter-spacing: 2px;
+}
+
+.breath-counter {
+  font-size: 18px;
+  color: #666;
+}
+
+/* HOLD */
+.hold h2 {
+  margin-bottom: 15px;
+  color: #667eea;
+}
+
+.hold p {
+  margin-bottom: 30px;
+  color: #666;
+}
+
+/* RECOVERY */
+.recovery h2 {
+  margin-bottom: 15px;
+  color: #667eea;
+}
+
+.recovery p {
+  margin-bottom: 30px;
+  color: #666;
+}
+
+/* COMPLETE */
+.complete h2 {
+  margin-bottom: 30px;
+  color: #667eea;
+}
+
+.session-summary {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 30px;
+  text-align: left;
+}
+
+.summary-round {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.summary-round:last-child {
+  border-bottom: none;
+}
+
+.summary-round-label {
+  font-weight: 600;
+  color: #667eea;
+}
+
+.summary-round-time {
+  font-family: 'Courier New', monospace;
+  font-weight: 500;
+  color: #333;
+}
+
+/* TIMER */
+.timer-display {
+  font-family: 'Courier New', monospace;
+  font-size: 64px;
+  font-weight: 700;
+  color: #667eea;
+  margin: 40px 0;
+  letter-spacing: 2px;
+}
+
+.timer-display.pulsing {
+  animation: pulse 0.5s;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+/* BUTTONS */
+.btn-primary,
+.btn-secondary {
+  padding: 14px 32px;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-top: 20px;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 5px 10px rgba(102, 126, 234, 0.2);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-primary.hidden {
+  display: none;
+}
+
+.btn-secondary {
+  background: #e0e0e0;
+  color: #333;
+  margin-top: 15px;
+}
+
+.btn-secondary:hover {
+  background: #d0d0d0;
+}
+
+/* LOGS */
+.logs-section {
+  margin-top: 40px;
+  border-top: 2px solid #f0f0f0;
+  padding-top: 20px;
+}
+
+.logs-section summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #667eea;
+  font-size: 16px;
+  user-select: none;
+}
+
+.logs-section summary:hover {
+  color: #764ba2;
+}
+
+.logs-panel {
+  margin-top: 20px;
+}
+
+#logs-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 15px;
+  font-size: 14px;
+}
+
+#logs-table thead {
+  background: #f8f9fa;
+}
+
+#logs-table th {
+  padding: 10px;
+  text-align: left;
+  font-weight: 600;
+  color: #667eea;
+  border-bottom: 2px solid #ddd;
+}
+
+#logs-table td {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+  color: #666;
+}
+
+#logs-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+#logs-table td:last-child {
+  font-family: 'Courier New', monospace;
+  font-weight: 500;
+  color: #333;
+}
+
+.empty-logs {
+  text-align: center;
+  color: #999;
+  padding: 20px;
+  font-size: 14px;
+}
+
+/* Mobile optimization */
+@media (max-width: 768px) {
+  body {
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+  }
+
+  .container {
+    width: 100%;
+    height: 100vh;
+    max-width: 100%;
+    border-radius: 0;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  header {
+    margin-bottom: 20px;
+  }
+
+  header h1 {
+    font-size: 22px;
+  }
+
+  .stage-panel {
+    flex: 1;
+    min-height: auto;
+    padding: 20px 0;
+  }
+
+  .stage {
+    padding: 0 10px;
+  }
+
+  .round-badge {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+
+  .circle {
+    width: 140px;
+    height: 140px;
+  }
+
+  .breathing-label {
+    font-size: 20px;
+  }
+
+  .breath-counter {
+    font-size: 16px;
+  }
+
+  .breathing-info {
+    margin-top: 20px;
+  }
+
+  .config-group {
+    flex-direction: column;
+    gap: 10px;
+    margin: 20px 0;
+  }
+
+  .config-group input {
+    width: 100%;
+    max-width: 120px;
+  }
+
+  .timer-display {
+    font-size: 54px;
+    margin: 30px 0;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    width: 100%;
+    padding: 16px;
+    font-size: 18px;
+    margin-top: 15px;
+    border-radius: 12px;
+    min-height: 50px;
+    touch-action: manipulation;
+  }
+
+  .stage.hold h2,
+  .stage.recovery h2,
+  .stage.idle h2 {
+    font-size: 20px;
+  }
+
+  .stage.hold p,
+  .stage.recovery p,
+  .stage.idle p {
+    font-size: 14px;
+  }
+
+  .session-summary {
+    padding: 15px;
+    margin-bottom: 20px;
+  }
+
+  .summary-round {
+    padding: 10px 0;
+  }
+
+  /* Logs table mobile */
+  #logs-table {
+    font-size: 13px;
+  }
+
+  #logs-table th,
+  #logs-table td {
+    padding: 8px 6px;
+  }
+
+  .logs-section {
+    margin-top: 30px;
+  }
+
+  .logs-section summary {
+    font-size: 14px;
+    padding: 10px 0;
+  }
+
+  .mute-btn {
+    font-size: 20px;
+    padding: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 15px;
+  }
+
+  header {
+    margin-bottom: 15px;
+  }
+
+  header h1 {
+    font-size: 20px;
+  }
+
+  .circle {
+    width: 120px;
+    height: 120px;
+  }
+
+  .timer-display {
+    font-size: 44px;
+    margin: 25px 0;
+  }
+
+  .stage-panel {
+    padding: 15px 0;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    padding: 14px;
+    font-size: 16px;
+    min-height: 48px;
+  }
+
+  .breathing-label {
+    font-size: 18px;
+  }
+
+  .breath-counter {
+    font-size: 14px;
+  }
+
+  .round-badge {
+    font-size: 11px;
+    padding: 4px 10px;
+  }
+
+  .session-summary {
+    padding: 12px;
+  }
+
+  .summary-round {
+    padding: 8px 0;
+    font-size: 13px;
+  }
+
+  #logs-table {
+    font-size: 12px;
+  }
+
+  #logs-table th,
+  #logs-table td {
+    padding: 6px 4px;
+  }
+}
