@@ -1,6 +1,6 @@
-# Breathwork Timer
+# Respire
 
-A simple, browser-based app for guided cyclic breathing exercises. Perfect for improving breath control, focus, and relaxation.
+A beautifully simple, browser-based app for guided cyclic breathing exercises. Perfect for improving breath control, focus, and relaxation.
 
 ## Features
 
