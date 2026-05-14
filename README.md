@@ -8,6 +8,7 @@ A beautifully simple, browser-based app for guided cyclic breathing exercises. P
 - **Retention Hold**: Track how long you can hold your breath
 - **Recovery Breath**: 15-second guided recovery phase
 - **Multi-Round Sessions**: Complete 3+ rounds in a single session
+- **Meditation Timer**: Standalone meditation mode with configurable durations and optional interval bells
 - **Session Logging**: All hold times saved to browser localStorage
 - **Zero Dependencies**: No npm packages, no build step
 - **Audio Feedback**: Web Audio API tone generation (configurable mute)
@@ -45,15 +46,32 @@ Each round consists of 4 phases:
    - Default: 3 rounds per session
    - Configurable in the UI
 
+### Meditation Timer
+
+Switch to the **Meditate** tab on the idle screen to access the meditation timer.
+
+- **Duration**: Choose from preset durations (5, 10, 15, 20, 30 minutes) or enter a custom duration
+- **Interval Bells** (optional): Enable to hear a soft bell tone every 60 seconds
+- **Countdown**: Timer counts down the remaining time
+- **End Tone**: A louder, distinct chime sounds when meditation is complete
+- **Stop Anytime**: Click "Stop" to end the meditation session early
+
+Perfect for daily mindfulness practice alongside the breathwork sessions.
+
 ### Audio Cues
 
+**Breathwork:**
 - **Inhale**: Low tone (220 Hz)
 - **Exhale**: Mid tone (330 Hz)
 - **Hold Start**: Deep gong (110 Hz)
 - **Recovery**: Bright chime (440 Hz)
 - **Countdown**: Rapid beeps (880 Hz) in final 3 seconds
 
-Mute/unmute anytime with the 🔊 button.
+**Meditation:**
+- **Interval Bell**: Soft tone (528 Hz) every 60 seconds (optional)
+- **End Tone**: Louder chime (440 Hz + 880 Hz) when meditation completes
+
+Mute/unmute anytime with the 🔊 button. Muting suppresses all audio cues.
 
 ## Session Logs
 
@@ -75,14 +93,20 @@ All sessions are automatically saved to browser localStorage (key: `bw_sessions`
 
 ## Configuration
 
-Edit `CONFIG` in `app.js` to customize:
+Edit `CONFIG` in `app.js` to customize breathwork and meditation settings. All settings persist via browser localStorage.
 
+**Breathwork:**
 - `breathCount`: Number of breaths per cycle (default: 30)
 - `breathInMs`: Inhale duration (default: 2000ms)
 - `breathOutMs`: Exhale duration (default: 2000ms)
 - `breathPauseMs`: Pause between breaths (default: 1000ms)
 - `recoveryHoldMs`: Recovery phase duration (default: 15000ms)
 - `defaultRounds`: Default number of rounds per session (default: 3)
+
+**Meditation:**
+- `meditationDurationMs`: Default meditation duration (default: 600000ms / 10 minutes)
+- `meditationIntervalMs`: Interval between bell tones (default: 60000ms / 60 seconds)
+- `meditationIntervalEnabled`: Enable/disable interval bells (default: true)
 
 ## Browser Compatibility
 
