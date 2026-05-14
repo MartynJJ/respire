@@ -261,6 +261,81 @@ header h1 {
   }
 }
 
+/* MODE TABS */
+.mode-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 0;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 10px;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  font-size: 15px;
+  font-weight: 600;
+  color: #999;
+  cursor: pointer;
+  margin-bottom: -2px;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.tab-btn.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+}
+
+/* DURATION PRESETS */
+.duration-presets {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+
+.preset-btn {
+  padding: 8px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 20px;
+  background: white;
+  color: #333;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.preset-btn.active,
+.preset-btn:hover {
+  border-color: #667eea;
+  color: #667eea;
+  background: rgba(102, 126, 234, 0.08);
+}
+
+/* TOGGLE GROUP */
+.toggle-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+}
+
+/* MEDITATION STAGE */
+.stage.meditation .timer-display {
+  margin: 30px 0 10px;
+}
+
+.meditation-subtext {
+  color: #999;
+  font-size: 14px;
+  margin-bottom: 30px;
+}
+
 /* BUTTONS */
 .btn-primary,
 .btn-secondary {
@@ -692,6 +767,43 @@ header h1 {
   .mute-btn {
     font-size: 20px;
     padding: 10px;
+  }
+
+  .mode-tabs {
+    margin-bottom: 15px;
+  }
+
+  .tab-btn {
+    font-size: 14px;
+    padding: 8px;
+  }
+
+  .duration-presets {
+    margin: 12px 0;
+  }
+
+  .preset-btn {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+
+  .toggle-group {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .toggle-group label {
+    font-size: 14px;
+  }
+
+  .toggle-group input {
+    width: 18px;
+    height: 18px;
+  }
+
+  .meditation-subtext {
+    font-size: 13px;
+    margin-bottom: 20px;
   }
 }
 

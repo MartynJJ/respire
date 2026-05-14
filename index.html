@@ -20,14 +20,46 @@
     <main id="stage-panel" class="stage-panel">
       <!-- IDLE state -->
       <div id="stage-idle" class="stage idle">
-        <h2>Ready to begin?</h2>
-        <p>This session will guide you through 3 rounds of breathwork.</p>
-        <div class="config-group">
-          <label for="rounds-input">Number of rounds:</label>
-          <input id="rounds-input" type="number" min="1" max="10" value="3">
+        <div class="mode-tabs">
+          <button class="tab-btn active" data-mode="breathwork">Breathwork</button>
+          <button class="tab-btn" data-mode="meditate">Meditate</button>
         </div>
-        <button id="btn-primary" class="btn-primary">Start</button>
-        <button id="btn-advanced" class="btn-secondary" style="width: 100%; margin-top: 10px;">Advanced Options</button>
+
+        <div id="breathwork-config">
+          <h2>Ready to begin?</h2>
+          <p>This session will guide you through 3 rounds of breathwork.</p>
+          <div class="config-group">
+            <label for="rounds-input">Number of rounds:</label>
+            <input id="rounds-input" type="number" min="1" max="10" value="3">
+          </div>
+          <button id="btn-primary" class="btn-primary">Start</button>
+          <button id="btn-advanced" class="btn-secondary" style="width: 100%; margin-top: 10px;">Advanced Options</button>
+        </div>
+
+        <div id="meditation-config" class="hidden">
+          <h2>Meditation Timer</h2>
+          <p>Choose a duration and sit quietly.</p>
+
+          <div class="duration-presets">
+            <button class="preset-btn" data-minutes="5">5m</button>
+            <button class="preset-btn active" data-minutes="10">10m</button>
+            <button class="preset-btn" data-minutes="15">15m</button>
+            <button class="preset-btn" data-minutes="20">20m</button>
+            <button class="preset-btn" data-minutes="30">30m</button>
+          </div>
+
+          <div class="config-group">
+            <label for="meditation-custom-minutes">Custom (minutes):</label>
+            <input id="meditation-custom-minutes" type="number" min="1" max="120" value="10">
+          </div>
+
+          <div class="config-group toggle-group">
+            <label for="meditation-interval-toggle">Interval bell (every 60s):</label>
+            <input id="meditation-interval-toggle" type="checkbox" checked>
+          </div>
+
+          <button id="btn-start-meditation" class="btn-primary">Start</button>
+        </div>
       </div>
 
       <!-- BREATHING state -->
@@ -63,6 +95,14 @@
         <h2>Session Complete!</h2>
         <div class="session-summary" id="session-summary"></div>
         <button id="btn-primary" class="btn-primary">Save & View Logs</button>
+      </div>
+
+      <!-- MEDITATION state -->
+      <div id="stage-meditation" class="stage meditation hidden">
+        <div class="round-badge" id="meditation-badge">Meditating</div>
+        <div class="timer-display" id="meditation-timer">10:00</div>
+        <div class="meditation-subtext" id="meditation-interval-label">Next bell in 1:00</div>
+        <button id="btn-stop-meditation" class="btn-secondary">Stop</button>
       </div>
     </main>
 

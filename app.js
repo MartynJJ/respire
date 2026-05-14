@@ -5,6 +5,9 @@ const DEFAULT_CONFIG = {
   breathPauseMs: 1000,
   recoveryHoldMs: 15000,
   defaultRounds: 3,
+  meditationDurationMs: 600000,
+  meditationIntervalMs: 60000,
+  meditationIntervalEnabled: true,
 };
 
 let CONFIG = { ...DEFAULT_CONFIG };
@@ -68,6 +71,15 @@ class AudioManager {
     this.play(880, 0.1, 'sine', 0.2);
   }
 
+  meditationIntervalSound() {
+    this.play(528, 2.0, 'sine', 0.25);
+  }
+
+  meditationEndSound() {
+    this.play(440, 3.0, 'sine', 0.55);
+    setTimeout(() => this.play(880, 2.5, 'sine', 0.4), 50);
+  }
+
   toggle() {
     this.isMuted = !this.isMuted;
     localStorage.setItem('bw_muted', this.isMuted);
@@ -86,6 +98,11 @@ class BreathworkApp {
     this.roundHoldTimes = [];
     this.sessionStartTime = new Date();
     this.timerId = null;
+    this.meditationStartTime = null;
+    this.meditationDuration = CONFIG.meditationDurationMs;
+    this.meditationIntervalEnabled = CONFIG.meditationIntervalEnabled;
+    this.meditationTimerId = null;
+    this.selectedMeditationMinutes = 10;
 
     this.initDOM();
     this.attachEventListeners();
@@ -100,9 +117,13 @@ class BreathworkApp {
       stageHold: document.getElementById('stage-hold'),
       stageRecovery: document.getElementById('stage-recovery'),
       stageComplete: document.getElementById('stage-complete'),
+      stageMeditation: document.getElementById('stage-meditation'),
       roundBadge: document.getElementById('round-badge'),
       holdRoundBadge: document.getElementById('hold-round-badge'),
       recoveryRoundBadge: document.getElementById('recovery-round-badge'),
+      meditationBadge: document.getElementById('meditation-badge'),
+      meditationTimer: document.getElementById('meditation-timer'),
+      meditationIntervalLabel: document.getElementById('meditation-interval-label'),
       circle: document.getElementById('circle'),
       breathingLabel: document.getElementById('breathing-label'),
       breathCounter: document.getElementById('breath-counter'),
@@ -112,11 +133,13 @@ class BreathworkApp {
       btnMute: document.getElementById('btn-mute'),
       btnPrimary: document.querySelectorAll('#btn-primary'),
       btnDone: document.getElementById('btn-done'),
+      btnStopMeditation: document.getElementById('btn-stop-meditation'),
       btnClearLogs: document.getElementById('btn-clear-logs'),
       logsTable: document.getElementById('logs-table'),
       logsTbody: document.getElementById('logs-tbody'),
       roundsInput: document.getElementById('rounds-input'),
       btnAdvanced: document.getElementById('btn-advanced'),
+      btnStartMeditation: document.getElementById('btn-start-meditation'),
       modal: document.getElementById('advanced-modal'),
       modalBackdrop: document.getElementById('modal-backdrop'),
       btnModalClose: document.getElementById('btn-modal-close'),
@@ -132,6 +155,12 @@ class BreathworkApp {
       exhaleDurationValue: document.getElementById('exhale-duration-value'),
       pauseDurationValue: document.getElementById('pause-duration-value'),
       recoveryDurationValue: document.getElementById('recovery-duration-value'),
+      breathworkConfig: document.getElementById('breathwork-config'),
+      meditationConfig: document.getElementById('meditation-config'),
+      meditationIntervalToggle: document.getElementById('meditation-interval-toggle'),
+      meditationCustomMinutes: document.getElementById('meditation-custom-minutes'),
+      tabBtns: document.querySelectorAll('.tab-btn'),
+      presetBtns: document.querySelectorAll('.preset-btn'),
     };
   }
 
@@ -164,6 +193,25 @@ class BreathworkApp {
     this.dom.recoveryDurationInput.addEventListener('input', (e) => {
       this.dom.recoveryDurationValue.textContent = Math.round(parseInt(e.target.value) / 1000) + 's';
     });
+
+    // Tab switching
+    this.dom.tabBtns.forEach(btn => btn.addEventListener('click', (e) => this.switchTab(e.target.dataset.mode)));
+
+    // Preset meditation duration buttons
+    this.dom.presetBtns.forEach(btn => btn.addEventListener('click', (e) => this.selectPreset(parseInt(e.target.dataset.minutes))));
+
+    // Custom meditation duration input
+    this.dom.meditationCustomMinutes.addEventListener('input', (e) => this.selectCustomDuration(parseInt(e.target.value)));
+
+    // Interval toggle
+    this.dom.meditationIntervalToggle.addEventListener('change', (e) => {
+      CONFIG.meditationIntervalEnabled = e.target.checked;
+      saveConfig();
+    });
+
+    // Meditation start / stop
+    this.dom.btnStartMeditation.addEventListener('click', () => this.startMeditation());
+    this.dom.btnStopMeditation.addEventListener('click', () => this.stopMeditation());
 
     document.querySelectorAll('button#btn-primary').forEach((btn) => {
       btn.addEventListener('click', (e) => {
@@ -202,6 +250,10 @@ class BreathworkApp {
         this.dom.stageComplete.classList.remove('hidden');
         this.renderSessionSummary();
         break;
+      case 'MEDITATION':
+        this.dom.stageMeditation.classList.remove('hidden');
+        this.runMeditationTimer();
+        break;
     }
   }
 
@@ -212,6 +264,7 @@ class BreathworkApp {
       this.dom.stageHold,
       this.dom.stageRecovery,
       this.dom.stageComplete,
+      this.dom.stageMeditation,
     ].forEach((stage) => stage.classList.add('hidden'));
   }
 
@@ -450,6 +503,104 @@ class BreathworkApp {
     CONFIG = { ...DEFAULT_CONFIG };
     saveConfig();
     this.openAdvancedModal();
+  }
+
+  switchTab(mode) {
+    this.dom.tabBtns.forEach(btn => {
+      if (btn.dataset.mode === mode) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+
+    if (mode === 'breathwork') {
+      this.dom.breathworkConfig.classList.remove('hidden');
+      this.dom.meditationConfig.classList.add('hidden');
+    } else {
+      this.dom.breathworkConfig.classList.add('hidden');
+      this.dom.meditationConfig.classList.remove('hidden');
+    }
+  }
+
+  selectPreset(minutes) {
+    this.selectedMeditationMinutes = minutes;
+    this.dom.meditationCustomMinutes.value = minutes;
+
+    this.dom.presetBtns.forEach(btn => {
+      if (parseInt(btn.dataset.minutes) === minutes) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+  }
+
+  selectCustomDuration(minutes) {
+    const val = parseInt(minutes) || 10;
+    this.selectedMeditationMinutes = val;
+
+    this.dom.presetBtns.forEach(btn => btn.classList.remove('active'));
+  }
+
+  startMeditation() {
+    this.meditationDuration = this.selectedMeditationMinutes * 60000;
+    this.meditationStartTime = Date.now();
+    this.meditationIntervalEnabled = this.dom.meditationIntervalToggle.checked;
+    this.setState('MEDITATION');
+  }
+
+  runMeditationTimer() {
+    if (this.meditationStartTime === null) return;
+
+    const elapsed = Date.now() - this.meditationStartTime;
+    const remaining = this.meditationDuration - elapsed;
+
+    if (remaining <= 0) {
+      this.audio.meditationEndSound();
+      this.meditationStartTime = null;
+      this.setState('IDLE');
+      return;
+    }
+
+    // Check for interval tone (every 60s)
+    if (this.meditationIntervalEnabled) {
+      const elapsedSecs = Math.floor(elapsed / 1000);
+      const prevElapsedSecs = Math.floor((elapsed - 1000) / 1000);
+      if (elapsedSecs > 0 && elapsedSecs % 60 === 0 && prevElapsedSecs % 60 !== 0) {
+        this.audio.meditationIntervalSound();
+      }
+    }
+
+    // Update display
+    const remainingSecs = Math.floor(remaining / 1000);
+    const mins = Math.floor(remainingSecs / 60);
+    const secs = remainingSecs % 60;
+    this.dom.meditationTimer.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+
+    // Update next interval label
+    if (this.meditationIntervalEnabled) {
+      const elapsedSecs = Math.floor(elapsed / 1000);
+      const nextIntervalSecs = Math.ceil((elapsedSecs + 1) / 60) * 60;
+      const secsToNext = nextIntervalSecs - elapsedSecs;
+      if (secsToNext <= 60 && secsToNext > 0) {
+        const nextMins = Math.floor(secsToNext / 60);
+        const nextSecs = secsToNext % 60;
+        this.dom.meditationIntervalLabel.textContent = `Next bell in ${nextMins}:${nextSecs.toString().padStart(2, '0')}`;
+      }
+    } else {
+      this.dom.meditationIntervalLabel.textContent = '';
+    }
+
+    if (this.state === 'MEDITATION') {
+      this.meditationTimerId = setTimeout(() => this.runMeditationTimer(), 100);
+    }
+  }
+
+  stopMeditation() {
+    clearTimeout(this.meditationTimerId);
+    this.meditationStartTime = null;
+    this.setState('IDLE');
   }
 }
 
