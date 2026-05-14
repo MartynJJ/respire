@@ -1,4 +1,4 @@
-const CONFIG = {
+const DEFAULT_CONFIG = {
   breathCount: 30,
   breathInMs: 2000,
   breathOutMs: 2000,
@@ -6,6 +6,21 @@ const CONFIG = {
   recoveryHoldMs: 15000,
   defaultRounds: 3,
 };
+
+let CONFIG = { ...DEFAULT_CONFIG };
+
+function loadConfig() {
+  const saved = localStorage.getItem('bw_config');
+  if (saved) {
+    CONFIG = { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
+  }
+}
+
+function saveConfig() {
+  localStorage.setItem('bw_config', JSON.stringify(CONFIG));
+}
+
+loadConfig();
 
 class AudioManager {
   constructor() {
@@ -101,6 +116,17 @@ class BreathworkApp {
       logsTable: document.getElementById('logs-table'),
       logsTbody: document.getElementById('logs-tbody'),
       roundsInput: document.getElementById('rounds-input'),
+      btnAdvanced: document.getElementById('btn-advanced'),
+      modal: document.getElementById('advanced-modal'),
+      modalBackdrop: document.getElementById('modal-backdrop'),
+      btnModalClose: document.getElementById('btn-modal-close'),
+      btnModalSave: document.getElementById('btn-modal-save'),
+      btnResetDefaults: document.getElementById('btn-reset-defaults'),
+      breathingCyclesInput: document.getElementById('breathing-cycles'),
+      inhaleDurationInput: document.getElementById('inhale-duration'),
+      exhaleDurationInput: document.getElementById('exhale-duration'),
+      pauseDurationInput: document.getElementById('pause-duration'),
+      recoveryDurationInput: document.getElementById('recovery-duration'),
     };
   }
 
@@ -110,6 +136,12 @@ class BreathworkApp {
     this.dom.roundsInput.addEventListener('change', (e) => {
       this.totalRounds = parseInt(e.target.value) || CONFIG.defaultRounds;
     });
+
+    this.dom.btnAdvanced.addEventListener('click', () => this.openAdvancedModal());
+    this.dom.btnModalClose.addEventListener('click', () => this.closeAdvancedModal());
+    this.dom.modalBackdrop.addEventListener('click', () => this.closeAdvancedModal());
+    this.dom.btnModalSave.addEventListener('click', () => this.saveAdvancedOptions());
+    this.dom.btnResetDefaults.addEventListener('click', () => this.resetToDefaults());
 
     document.querySelectorAll('button#btn-primary').forEach((btn) => {
       btn.addEventListener('click', (e) => {
@@ -363,6 +395,39 @@ class BreathworkApp {
       this.dom.btnMute.textContent = '🔊';
       this.dom.btnMute.classList.remove('muted');
     }
+  }
+
+  openAdvancedModal() {
+    this.dom.breathingCyclesInput.value = CONFIG.breathCount;
+    this.dom.inhaleDurationInput.value = CONFIG.breathInMs;
+    this.dom.exhaleDurationInput.value = CONFIG.breathOutMs;
+    this.dom.pauseDurationInput.value = CONFIG.breathPauseMs;
+    this.dom.recoveryDurationInput.value = CONFIG.recoveryHoldMs;
+
+    this.dom.modal.classList.remove('hidden');
+    this.dom.modalBackdrop.classList.remove('hidden');
+  }
+
+  closeAdvancedModal() {
+    this.dom.modal.classList.add('hidden');
+    this.dom.modalBackdrop.classList.add('hidden');
+  }
+
+  saveAdvancedOptions() {
+    CONFIG.breathCount = parseInt(this.dom.breathingCyclesInput.value) || DEFAULT_CONFIG.breathCount;
+    CONFIG.breathInMs = parseInt(this.dom.inhaleDurationInput.value) || DEFAULT_CONFIG.breathInMs;
+    CONFIG.breathOutMs = parseInt(this.dom.exhaleDurationInput.value) || DEFAULT_CONFIG.breathOutMs;
+    CONFIG.breathPauseMs = parseInt(this.dom.pauseDurationInput.value) || DEFAULT_CONFIG.breathPauseMs;
+    CONFIG.recoveryHoldMs = parseInt(this.dom.recoveryDurationInput.value) || DEFAULT_CONFIG.recoveryHoldMs;
+
+    saveConfig();
+    this.closeAdvancedModal();
+  }
+
+  resetToDefaults() {
+    CONFIG = { ...DEFAULT_CONFIG };
+    saveConfig();
+    this.openAdvancedModal();
   }
 }
 
