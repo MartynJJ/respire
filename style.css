@@ -80,6 +80,10 @@ header h1 {
   }
 }
 
+.hidden {
+  display: none !important;
+}
+
 .stage.hidden {
   display: none;
 }
