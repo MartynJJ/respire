@@ -127,6 +127,11 @@ class BreathworkApp {
       exhaleDurationInput: document.getElementById('exhale-duration'),
       pauseDurationInput: document.getElementById('pause-duration'),
       recoveryDurationInput: document.getElementById('recovery-duration'),
+      breathingCyclesValue: document.getElementById('breathing-cycles-value'),
+      inhaleDurationValue: document.getElementById('inhale-duration-value'),
+      exhaleDurationValue: document.getElementById('exhale-duration-value'),
+      pauseDurationValue: document.getElementById('pause-duration-value'),
+      recoveryDurationValue: document.getElementById('recovery-duration-value'),
     };
   }
 
@@ -142,6 +147,23 @@ class BreathworkApp {
     this.dom.modalBackdrop.addEventListener('click', () => this.closeAdvancedModal());
     this.dom.btnModalSave.addEventListener('click', () => this.saveAdvancedOptions());
     this.dom.btnResetDefaults.addEventListener('click', () => this.resetToDefaults());
+
+    // Slider value display updates
+    this.dom.breathingCyclesInput.addEventListener('input', (e) => {
+      this.dom.breathingCyclesValue.textContent = e.target.value;
+    });
+    this.dom.inhaleDurationInput.addEventListener('input', (e) => {
+      this.dom.inhaleDurationValue.textContent = (parseInt(e.target.value) / 1000).toFixed(1) + 's';
+    });
+    this.dom.exhaleDurationInput.addEventListener('input', (e) => {
+      this.dom.exhaleDurationValue.textContent = (parseInt(e.target.value) / 1000).toFixed(1) + 's';
+    });
+    this.dom.pauseDurationInput.addEventListener('input', (e) => {
+      this.dom.pauseDurationValue.textContent = (parseInt(e.target.value) / 1000).toFixed(1) + 's';
+    });
+    this.dom.recoveryDurationInput.addEventListener('input', (e) => {
+      this.dom.recoveryDurationValue.textContent = Math.round(parseInt(e.target.value) / 1000) + 's';
+    });
 
     document.querySelectorAll('button#btn-primary').forEach((btn) => {
       btn.addEventListener('click', (e) => {
