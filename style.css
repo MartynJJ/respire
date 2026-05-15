@@ -40,6 +40,35 @@ header h1 {
   color: #667eea;
 }
 
+.header-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.control-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.control-btn:hover {
+  background: #f0f0f0;
+}
+
+.control-btn.muted {
+  opacity: 0.5;
+}
+
+.control-btn.active {
+  background: #667eea;
+  color: white;
+}
+
 .mute-btn {
   background: none;
   border: none;

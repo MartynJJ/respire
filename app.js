@@ -29,6 +29,8 @@ class AudioManager {
   constructor() {
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
     this.isMuted = localStorage.getItem('bw_muted') === 'true';
+    this.useVocals = localStorage.getItem('bw_use_vocals') === 'true';
+    this.speechSynthesis = window.speechSynthesis;
   }
 
   play(frequency, duration, type = 'sine', volume = 0.3) {
@@ -51,12 +53,35 @@ class AudioManager {
     osc.stop(now + duration);
   }
 
+  speak(text, priority = false) {
+    if (this.isMuted || !this.useVocals) return;
+
+    // Cancel pending utterances if priority
+    if (priority) {
+      this.speechSynthesis.cancel();
+    }
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.9;
+    utterance.pitch = 1;
+    utterance.volume = 0.8;
+    this.speechSynthesis.speak(utterance);
+  }
+
   inhaleSound() {
-    this.play(220, 0.3, 'sine', 0.2);
+    if (this.useVocals) {
+      this.speak('Inhale');
+    } else {
+      this.play(220, 0.3, 'sine', 0.2);
+    }
   }
 
   exhaleSound() {
-    this.play(330, 0.3, 'sine', 0.2);
+    if (this.useVocals) {
+      this.speak('Exhale');
+    } else {
+      this.play(330, 0.3, 'sine', 0.2);
+    }
   }
 
   holdStartSound() {
@@ -80,10 +105,16 @@ class AudioManager {
     setTimeout(() => this.play(880, 2.5, 'sine', 0.4), 50);
   }
 
-  toggle() {
+  toggleMute() {
     this.isMuted = !this.isMuted;
     localStorage.setItem('bw_muted', this.isMuted);
     return this.isMuted;
+  }
+
+  toggleVocals() {
+    this.useVocals = !this.useVocals;
+    localStorage.setItem('bw_use_vocals', this.useVocals);
+    return this.useVocals;
   }
 }
 
@@ -107,6 +138,7 @@ class BreathworkApp {
     this.initDOM();
     this.attachEventListeners();
     this.updateMuteButton();
+    this.updateVocalsButton();
     this.renderLogs();
   }
 
@@ -166,6 +198,10 @@ class BreathworkApp {
 
   attachEventListeners() {
     this.dom.btnMute.addEventListener('click', () => this.toggleMute());
+    this.dom.btnVocals = document.getElementById('btn-vocals');
+    if (this.dom.btnVocals) {
+      this.dom.btnVocals.addEventListener('click', () => this.toggleVocals());
+    }
     this.dom.btnClearLogs.addEventListener('click', () => this.clearLogs());
     this.dom.roundsInput.addEventListener('change', (e) => {
       this.totalRounds = parseInt(e.target.value) || CONFIG.defaultRounds;
@@ -458,7 +494,7 @@ class BreathworkApp {
   }
 
   toggleMute() {
-    const isMuted = this.audio.toggle();
+    const isMuted = this.audio.toggleMute();
     this.updateMuteButton();
   }
 
@@ -469,6 +505,22 @@ class BreathworkApp {
     } else {
       this.dom.btnMute.textContent = '🔊';
       this.dom.btnMute.classList.remove('muted');
+    }
+  }
+
+  toggleVocals() {
+    const useVocals = this.audio.toggleVocals();
+    this.updateVocalsButton();
+  }
+
+  updateVocalsButton() {
+    if (!this.dom.btnVocals) return;
+    if (this.audio.useVocals) {
+      this.dom.btnVocals.textContent = '🎤';
+      this.dom.btnVocals.classList.add('active');
+    } else {
+      this.dom.btnVocals.textContent = '🎵';
+      this.dom.btnVocals.classList.remove('active');
     }
   }
 
