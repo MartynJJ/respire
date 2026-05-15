@@ -30,40 +30,7 @@ class AudioManager {
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
     this.isMuted = localStorage.getItem('bw_muted') === 'true';
     this.useVocals = localStorage.getItem('bw_use_vocals') === 'true';
-    this.voiceGender = localStorage.getItem('bw_voice_gender') || 'female';
     this.speechSynthesis = window.speechSynthesis;
-    this.voices = [];
-    this.selectedVoice = null;
-    this.initVoices();
-  }
-
-  initVoices() {
-    // Load voices asynchronously (some browsers load them after page load)
-    this.voices = this.speechSynthesis.getVoices();
-    if (this.voices.length === 0) {
-      this.speechSynthesis.onvoiceschanged = () => {
-        this.voices = this.speechSynthesis.getVoices();
-        this.selectVoiceByGender();
-      };
-    } else {
-      this.selectVoiceByGender();
-    }
-  }
-
-  selectVoiceByGender() {
-    if (this.voices.length === 0) return;
-
-    // Try to find voice by gender preference
-    const genderVoices = this.voices.filter(v => {
-      const name = v.name.toLowerCase();
-      if (this.voiceGender === 'female') {
-        return name.includes('female') || name.includes('woman') || name.includes('samantha') || name.includes('victoria');
-      } else {
-        return name.includes('male') || name.includes('man') || name.includes('alex') || name.includes('daniel');
-      }
-    });
-
-    this.selectedVoice = genderVoices.length > 0 ? genderVoices[0] : this.voices[0];
   }
 
   play(frequency, duration, type = 'sine', volume = 0.3) {
@@ -96,19 +63,9 @@ class AudioManager {
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 0.9;
-    utterance.pitch = this.voiceGender === 'female' ? 1.2 : 0.8;
+    utterance.pitch = 1;
     utterance.volume = 0.8;
-    if (this.selectedVoice) {
-      utterance.voice = this.selectedVoice;
-    }
     this.speechSynthesis.speak(utterance);
-  }
-
-  toggleVoiceGender() {
-    this.voiceGender = this.voiceGender === 'female' ? 'male' : 'female';
-    localStorage.setItem('bw_voice_gender', this.voiceGender);
-    this.selectVoiceByGender();
-    return this.voiceGender;
   }
 
   inhaleSound() {
@@ -182,7 +139,6 @@ class BreathworkApp {
     this.attachEventListeners();
     this.updateMuteButton();
     this.updateVocalsButton();
-    this.updateVoiceGenderButton();
     this.renderLogs();
   }
 
@@ -245,10 +201,6 @@ class BreathworkApp {
     this.dom.btnVocals = document.getElementById('btn-vocals');
     if (this.dom.btnVocals) {
       this.dom.btnVocals.addEventListener('click', () => this.toggleVocals());
-    }
-    this.dom.btnVoiceGender = document.getElementById('btn-voice-gender');
-    if (this.dom.btnVoiceGender) {
-      this.dom.btnVoiceGender.addEventListener('click', () => this.toggleVoiceGender());
     }
     this.dom.btnClearLogs.addEventListener('click', () => this.clearLogs());
     this.dom.roundsInput.addEventListener('change', (e) => {
@@ -569,22 +521,6 @@ class BreathworkApp {
     } else {
       this.dom.btnVocals.textContent = '🎵';
       this.dom.btnVocals.classList.remove('active');
-    }
-  }
-
-  toggleVoiceGender() {
-    const gender = this.audio.toggleVoiceGender();
-    this.updateVoiceGenderButton();
-  }
-
-  updateVoiceGenderButton() {
-    if (!this.dom.btnVoiceGender) return;
-    if (this.audio.voiceGender === 'female') {
-      this.dom.btnVoiceGender.textContent = '♀';
-      this.dom.btnVoiceGender.classList.remove('male');
-    } else {
-      this.dom.btnVoiceGender.textContent = '♂';
-      this.dom.btnVoiceGender.classList.add('male');
     }
   }
 
