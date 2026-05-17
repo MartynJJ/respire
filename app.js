@@ -389,13 +389,7 @@ class BreathworkApp {
     const holdMs = Date.now() - this.holdStartTime;
     this.roundHoldTimes.push(holdMs);
     this.holdStartTime = null;
-
-    if (this.currentRound < this.totalRounds) {
-      this.currentRound++;
-      this.setState('RECOVERY');
-    } else {
-      this.setState('RECOVERY');
-    }
+    this.setState('RECOVERY');
   }
 
   startRecovery() {
