@@ -181,20 +181,13 @@ header h1 {
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: breathe 5s infinite;
+  transform: scale(0.8);
+  transition: transform 0.5s ease-in-out;
   box-shadow: 0 10px 40px rgba(102, 126, 234, 0.4);
   -webkit-user-select: none;
   user-select: none;
 }
 
-@keyframes breathe {
-  0%, 100% {
-    transform: scale(0.8);
-  }
-  50% {
-    transform: scale(1.2);
-  }
-}
 
 .breathing-info {
   width: 100%;
