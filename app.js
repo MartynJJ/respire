@@ -329,14 +329,14 @@ class BreathworkApp {
 
     this.dom.breathingLabel.textContent = 'INHALE';
     this.audio.inhaleSound();
-    this.dom.circle.style.animation = 'none';
-    setTimeout(() => {
-      this.dom.circle.style.animation = '';
-    }, 10);
+    this.dom.circle.style.transition = `transform ${CONFIG.breathInMs}ms ease-in-out`;
+    this.dom.circle.style.transform = 'scale(1.2)';
 
     setTimeout(() => {
       this.dom.breathingLabel.textContent = 'EXHALE';
       this.audio.exhaleSound();
+      this.dom.circle.style.transition = `transform ${CONFIG.breathOutMs}ms ease-in-out`;
+      this.dom.circle.style.transform = 'scale(0.8)';
     }, CONFIG.breathInMs);
 
     setTimeout(() => {
