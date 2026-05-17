@@ -1,6 +1,6 @@
 const DEFAULT_CONFIG = {
   breathCount: 30,
-  breathInMs: 2000,
+  breathInMs: 500,
   breathOutMs: 2000,
   breathPauseMs: 0,
   recoveryHoldMs: 15000,
