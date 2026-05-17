@@ -1,7 +1,8 @@
 const DEFAULT_CONFIG = {
   breathCount: 30,
   breathInMs: 500,
-  breathOutMs: 2000,
+  breathHoldMs: 0,
+  breathOutMs: 500,
   breathPauseMs: 0,
   recoveryHoldMs: 15000,
   defaultRounds: 3,
@@ -179,14 +180,17 @@ class BreathworkApp {
       btnResetDefaults: document.getElementById('btn-reset-defaults'),
       breathingCyclesInput: document.getElementById('breathing-cycles'),
       inhaleDurationInput: document.getElementById('inhale-duration'),
+      holdDurationInput: document.getElementById('hold-duration'),
       exhaleDurationInput: document.getElementById('exhale-duration'),
       pauseDurationInput: document.getElementById('pause-duration'),
       recoveryDurationInput: document.getElementById('recovery-duration'),
       breathingCyclesValue: document.getElementById('breathing-cycles-value'),
       inhaleDurationValue: document.getElementById('inhale-duration-value'),
+      holdDurationValue: document.getElementById('hold-duration-value'),
       exhaleDurationValue: document.getElementById('exhale-duration-value'),
       pauseDurationValue: document.getElementById('pause-duration-value'),
       recoveryDurationValue: document.getElementById('recovery-duration-value'),
+      btnPresetBox: document.getElementById('btn-preset-box'),
       breathworkConfig: document.getElementById('breathwork-config'),
       meditationConfig: document.getElementById('meditation-config'),
       meditationIntervalToggle: document.getElementById('meditation-interval-toggle'),
@@ -220,9 +224,13 @@ class BreathworkApp {
     this.dom.inhaleDurationInput.addEventListener('input', (e) => {
       this.dom.inhaleDurationValue.textContent = (parseInt(e.target.value) / 1000).toFixed(1) + 's';
     });
+    this.dom.holdDurationInput.addEventListener('input', (e) => {
+      this.dom.holdDurationValue.textContent = (parseInt(e.target.value) / 1000).toFixed(1) + 's';
+    });
     this.dom.exhaleDurationInput.addEventListener('input', (e) => {
       this.dom.exhaleDurationValue.textContent = (parseInt(e.target.value) / 1000).toFixed(1) + 's';
     });
+    this.dom.btnPresetBox.addEventListener('click', () => this.applyBoxBreathingPreset());
     this.dom.pauseDurationInput.addEventListener('input', (e) => {
       this.dom.pauseDurationValue.textContent = (parseInt(e.target.value) / 1000).toFixed(1) + 's';
     });
@@ -332,16 +340,22 @@ class BreathworkApp {
     this.dom.circle.style.transition = `transform ${CONFIG.breathInMs}ms ease-in-out`;
     this.dom.circle.style.transform = 'scale(1.2)';
 
+    if (CONFIG.breathHoldMs > 0) {
+      setTimeout(() => {
+        this.dom.breathingLabel.textContent = 'HOLD';
+      }, CONFIG.breathInMs);
+    }
+
     setTimeout(() => {
       this.dom.breathingLabel.textContent = 'EXHALE';
       this.audio.exhaleSound();
       this.dom.circle.style.transition = `transform ${CONFIG.breathOutMs}ms ease-in-out`;
       this.dom.circle.style.transform = 'scale(0.8)';
-    }, CONFIG.breathInMs);
+    }, CONFIG.breathInMs + CONFIG.breathHoldMs);
 
     setTimeout(() => {
       this.cycleBreaths();
-    }, CONFIG.breathInMs + CONFIG.breathOutMs + CONFIG.breathPauseMs);
+    }, CONFIG.breathInMs + CONFIG.breathHoldMs + CONFIG.breathOutMs + CONFIG.breathPauseMs);
   }
 
   startHold() {
@@ -527,6 +541,7 @@ class BreathworkApp {
   openAdvancedModal() {
     this.dom.breathingCyclesInput.value = CONFIG.breathCount;
     this.dom.inhaleDurationInput.value = CONFIG.breathInMs;
+    this.dom.holdDurationInput.value = CONFIG.breathHoldMs;
     this.dom.exhaleDurationInput.value = CONFIG.breathOutMs;
     this.dom.pauseDurationInput.value = CONFIG.breathPauseMs;
     this.dom.recoveryDurationInput.value = CONFIG.recoveryHoldMs;
@@ -543,8 +558,9 @@ class BreathworkApp {
   saveAdvancedOptions() {
     CONFIG.breathCount = parseInt(this.dom.breathingCyclesInput.value) || DEFAULT_CONFIG.breathCount;
     CONFIG.breathInMs = parseInt(this.dom.inhaleDurationInput.value) || DEFAULT_CONFIG.breathInMs;
+    CONFIG.breathHoldMs = parseInt(this.dom.holdDurationInput.value);
     CONFIG.breathOutMs = parseInt(this.dom.exhaleDurationInput.value) || DEFAULT_CONFIG.breathOutMs;
-    CONFIG.breathPauseMs = parseInt(this.dom.pauseDurationInput.value) || DEFAULT_CONFIG.breathPauseMs;
+    CONFIG.breathPauseMs = parseInt(this.dom.pauseDurationInput.value);
     CONFIG.recoveryHoldMs = parseInt(this.dom.recoveryDurationInput.value) || DEFAULT_CONFIG.recoveryHoldMs;
 
     saveConfig();
@@ -553,6 +569,15 @@ class BreathworkApp {
 
   resetToDefaults() {
     CONFIG = { ...DEFAULT_CONFIG };
+    saveConfig();
+    this.openAdvancedModal();
+  }
+
+  applyBoxBreathingPreset() {
+    CONFIG.breathInMs = 4000;
+    CONFIG.breathHoldMs = 4000;
+    CONFIG.breathOutMs = 4000;
+    CONFIG.breathPauseMs = 4000;
     saveConfig();
     this.openAdvancedModal();
   }
