@@ -2,7 +2,7 @@ const DEFAULT_CONFIG = {
   breathCount: 30,
   breathInMs: 2000,
   breathOutMs: 2000,
-  breathPauseMs: 1000,
+  breathPauseMs: 0,
   recoveryHoldMs: 15000,
   defaultRounds: 3,
   meditationDurationMs: 600000,
