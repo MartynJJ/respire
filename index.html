@@ -15,6 +15,8 @@
     <header>
       <h1>Respire</h1>
       <div class="header-controls">
+        <button id="btn-haptic" class="control-btn haptic-btn" title="Toggle haptic feedback">📳</button>
+        <button id="btn-dark-mode" class="control-btn" title="Toggle dark mode">🌙</button>
         <button id="btn-vocals" class="control-btn" title="Toggle tones/vocals">🎵</button>
         <button id="btn-mute" class="control-btn mute-btn" title="Toggle audio">🔊</button>
       </div>
@@ -73,6 +75,7 @@
           <div class="breathing-label" id="breathing-label">INHALE</div>
           <div class="breath-counter" id="breath-counter">0 / 30</div>
         </div>
+        <button id="btn-pause-breathe" class="btn-secondary pause-btn">Pause</button>
       </div>
 
       <!-- HOLD state -->
@@ -83,6 +86,7 @@
         <div class="timer-display" id="hold-timer">0:00</div>
         <button id="btn-primary" class="btn-primary hidden">Start Hold</button>
         <button id="btn-done" class="btn-primary hidden">Done</button>
+        <button id="btn-pause-hold" class="btn-secondary pause-btn hidden">Pause</button>
       </div>
 
       <!-- RECOVERY state -->
@@ -91,13 +95,14 @@
         <h2>Recovery Breath</h2>
         <p>Inhale deeply and hold for 15 seconds.</p>
         <div class="timer-display" id="recovery-timer">0:15</div>
+        <button id="btn-pause-recovery" class="btn-secondary pause-btn">Pause</button>
       </div>
 
       <!-- COMPLETE state -->
       <div id="stage-complete" class="stage complete hidden">
         <h2>Session Complete!</h2>
         <div class="session-summary" id="session-summary"></div>
-        <button id="btn-primary" class="btn-primary">Save & View Logs</button>
+        <button id="btn-primary" class="btn-primary">Save &amp; View Logs</button>
       </div>
 
       <!-- MEDITATION state -->
@@ -116,7 +121,8 @@
           <thead>
             <tr>
               <th>Date</th>
-              <th>Hold Times</th>
+              <th>Rounds</th>
+              <th>Best / Total</th>
             </tr>
           </thead>
           <tbody id="logs-tbody"></tbody>
@@ -166,8 +172,8 @@
             <label for="exhale-duration">Exhale Duration</label>
             <span class="option-value" id="exhale-duration-value">0.5s</span>
           </div>
-          <input id="exhale-duration" type="range" min="200" max="5000" step="100" value="500">
-          <small>0.2s to 5.0s</small>
+          <input id="exhale-duration" type="range" min="200" max="10000" step="100" value="500">
+          <small>0.2s to 10.0s</small>
         </div>
 
         <div class="option-group">
@@ -191,8 +197,9 @@
         <div class="divider"></div>
 
         <div style="margin-bottom: 10px;">
-          <div style="font-size: 12px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;">Presets</div>
+          <div class="option-section-label">Presets</div>
           <button id="btn-preset-box" class="btn-secondary" style="width: 100%;">Box Breathing (4-4-4-4)</button>
+          <button id="btn-preset-478" class="btn-secondary" style="width: 100%; margin-top: 8px;">4-7-8 Breathing</button>
         </div>
 
         <div class="divider"></div>
