@@ -14,9 +14,11 @@ const DEFAULT_CONFIG = {
 let CONFIG = { ...DEFAULT_CONFIG };
 
 function loadConfig() {
-  const saved = localStorage.getItem('bw_config');
-  if (saved) {
-    CONFIG = { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
+  try {
+    const saved = localStorage.getItem('bw_config');
+    if (saved) CONFIG = { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
+  } catch (e) {
+    CONFIG = { ...DEFAULT_CONFIG };
   }
 }
 
@@ -36,6 +38,10 @@ class AudioManager {
     this.isMuted = localStorage.getItem('bw_muted') === 'true';
     this.useVocals = localStorage.getItem('bw_use_vocals') === 'true';
     this.speechSynthesis = window.speechSynthesis;
+  }
+
+  resume() {
+    if (this.audioContext.state === 'suspended') this.audioContext.resume();
   }
 
   play(frequency, duration, type = 'sine', volume = 0.3) {
@@ -140,7 +146,8 @@ class BreathworkApp {
     this.breathCurrentPhase = null;
     this.breathPhaseEnteredAt = null;
     this.pausedHoldElapsed = 0;
-    this.recoveryRemaining = 0;
+    this.recoveryEndTime = 0;
+    this.recoveryRemainingAtPause = 0;
 
     this.initDOM();
     this.attachEventListeners();
@@ -229,7 +236,7 @@ class BreathworkApp {
 
     this.dom.btnClearLogs.addEventListener('click', () => this.clearLogs());
     this.dom.roundsInput.addEventListener('change', (e) => {
-      this.totalRounds = parseInt(e.target.value) || CONFIG.defaultRounds;
+      this.totalRounds = Math.max(1, parseInt(e.target.value) || CONFIG.defaultRounds);
     });
 
     this.dom.btnAdvanced.addEventListener('click', () => this.openAdvancedModal());
@@ -292,6 +299,7 @@ class BreathworkApp {
     this.breathTimerIds.forEach(id => clearTimeout(id));
     this.breathTimerIds = [];
     clearTimeout(this.timerId);
+    clearTimeout(this.meditationTimerId);
     this.timerId = null;
     this.dom.circle.classList.remove('paused');
     this.updatePauseButton(false);
@@ -341,6 +349,7 @@ class BreathworkApp {
   }
 
   startSession() {
+    this.audio.resume();
     this.currentRound = 1;
     this.roundHoldTimes = [];
     this.sessionStartTime = new Date();
@@ -432,6 +441,10 @@ class BreathworkApp {
       this.pausedHoldElapsed = Date.now() - this.holdStartTime;
     }
 
+    if (this.state === 'RECOVERY') {
+      this.recoveryRemainingAtPause = Math.max(0, this.recoveryEndTime - Date.now());
+    }
+
     this.updatePauseButton(true);
   }
 
@@ -445,6 +458,7 @@ class BreathworkApp {
       this.holdStartTime = Date.now() - this.pausedHoldElapsed;
       this.updateHoldTimer();
     } else if (this.state === 'RECOVERY') {
+      this.recoveryEndTime = Date.now() + this.recoveryRemainingAtPause;
       this.tickRecovery();
     }
 
@@ -548,6 +562,7 @@ class BreathworkApp {
   }
 
   endHold() {
+    if (!this.holdStartTime) return;
     clearTimeout(this.timerId);
     const holdMs = Date.now() - this.holdStartTime;
     this.roundHoldTimes.push(holdMs);
@@ -559,20 +574,22 @@ class BreathworkApp {
     this.dom.recoveryRoundBadge.textContent = `Round ${this.currentRound} of ${this.totalRounds}`;
     this.audio.recoveryStartSound();
     this.haptic.vibrate(this.haptic.RECOVERY_START);
-    this.recoveryRemaining = CONFIG.recoveryHoldMs;
+    this.recoveryEndTime = Date.now() + CONFIG.recoveryHoldMs;
     this.tickRecovery();
   }
 
   tickRecovery() {
-    this.recoveryRemaining -= 100;
-    const secs = (this.recoveryRemaining / 1000).toFixed(2);
-    this.dom.recoveryTimer.textContent = `0:${secs.padStart(5, '0')}`;
+    const remaining = Math.max(0, this.recoveryEndTime - Date.now());
+    const totalSecs = remaining / 1000;
+    const mins = Math.floor(totalSecs / 60);
+    const secs = (totalSecs % 60).toFixed(2);
+    this.dom.recoveryTimer.textContent = `${mins}:${secs.padStart(5, '0')}`;
 
-    if (this.recoveryRemaining <= 3000 && this.recoveryRemaining > 0) {
+    if (remaining <= 3000 && remaining > 0) {
       this.audio.countdownBeep();
     }
 
-    if (this.recoveryRemaining > 0) {
+    if (remaining > 0) {
       this.timerId = setTimeout(() => this.tickRecovery(), 100);
     } else {
       this.endRecovery();
@@ -600,10 +617,13 @@ class BreathworkApp {
     this.roundHoldTimes.forEach((holdMs, idx) => {
       const div = document.createElement('div');
       div.className = 'summary-round';
-      div.innerHTML = `
-        <span class="summary-round-label">Round ${idx + 1}</span>
-        <span class="summary-round-time">${this.formatMs(holdMs)}</span>
-      `;
+      const label = document.createElement('span');
+      label.className = 'summary-round-label';
+      label.textContent = `Round ${idx + 1}`;
+      const time = document.createElement('span');
+      time.className = 'summary-round-time';
+      time.textContent = this.formatMs(holdMs);
+      div.append(label, time);
       summary.appendChild(div);
     });
     this.dom.sessionSummary.innerHTML = summary.innerHTML;
@@ -620,9 +640,13 @@ class BreathworkApp {
       bestHoldMs,
     };
 
-    const sessions = JSON.parse(localStorage.getItem('bw_sessions') || '[]');
-    sessions.unshift(session);
-    localStorage.setItem('bw_sessions', JSON.stringify(sessions.slice(0, 50)));
+    try {
+      const sessions = JSON.parse(localStorage.getItem('bw_sessions') || '[]');
+      sessions.unshift(session);
+      localStorage.setItem('bw_sessions', JSON.stringify(sessions.slice(0, 50)));
+    } catch (e) {
+      localStorage.setItem('bw_sessions', JSON.stringify([session]));
+    }
 
     this.renderLogs();
     this.setState('IDLE');
@@ -630,12 +654,22 @@ class BreathworkApp {
   }
 
   renderLogs() {
-    const sessions = JSON.parse(localStorage.getItem('bw_sessions') || '[]');
+    let sessions = [];
+    try {
+      sessions = JSON.parse(localStorage.getItem('bw_sessions') || '[]');
+    } catch (e) {
+      sessions = [];
+    }
+
     this.dom.logsTbody.innerHTML = '';
 
     if (sessions.length === 0) {
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td colspan="3" class="empty-logs">No sessions yet</td>';
+      const td = document.createElement('td');
+      td.colSpan = 3;
+      td.className = 'empty-logs';
+      td.textContent = 'No sessions yet';
+      tr.appendChild(td);
       this.dom.logsTbody.appendChild(tr);
       return;
     }
@@ -659,11 +693,24 @@ class BreathworkApp {
 
       const tr = document.createElement('tr');
       if (isPB) tr.classList.add('pb-row');
-      tr.innerHTML = `
-        <td>${dateStr}</td>
-        <td>${roundCount}</td>
-        <td>${this.formatMs(bestHoldMs)}${isPB ? ' <span class="pb-badge">PB</span>' : ''} / ${this.formatMs(totalHoldMs)}</td>
-      `;
+
+      const td1 = document.createElement('td');
+      td1.textContent = dateStr;
+
+      const td2 = document.createElement('td');
+      td2.textContent = roundCount;
+
+      const td3 = document.createElement('td');
+      td3.textContent = this.formatMs(bestHoldMs);
+      if (isPB) {
+        const badge = document.createElement('span');
+        badge.className = 'pb-badge';
+        badge.textContent = 'PB';
+        td3.appendChild(badge);
+      }
+      td3.appendChild(document.createTextNode(` / ${this.formatMs(totalHoldMs)}`));
+
+      tr.append(td1, td2, td3);
       this.dom.logsTbody.appendChild(tr);
     });
   }
@@ -767,9 +814,9 @@ class BreathworkApp {
   saveAdvancedOptions() {
     CONFIG.breathCount = parseInt(this.dom.breathingCyclesInput.value) || DEFAULT_CONFIG.breathCount;
     CONFIG.breathInMs = parseInt(this.dom.inhaleDurationInput.value) || DEFAULT_CONFIG.breathInMs;
-    CONFIG.breathHoldMs = parseInt(this.dom.holdDurationInput.value);
+    CONFIG.breathHoldMs = parseInt(this.dom.holdDurationInput.value) || 0;
     CONFIG.breathOutMs = parseInt(this.dom.exhaleDurationInput.value) || DEFAULT_CONFIG.breathOutMs;
-    CONFIG.breathPauseMs = parseInt(this.dom.pauseDurationInput.value);
+    CONFIG.breathPauseMs = parseInt(this.dom.pauseDurationInput.value) || 0;
     CONFIG.recoveryHoldMs = parseInt(this.dom.recoveryDurationInput.value) || DEFAULT_CONFIG.recoveryHoldMs;
     saveConfig();
     this.closeAdvancedModal();
@@ -821,12 +868,13 @@ class BreathworkApp {
   }
 
   selectCustomDuration(minutes) {
-    const val = parseInt(minutes) || 10;
+    const val = Math.max(1, parseInt(minutes) || 1);
     this.selectedMeditationMinutes = val;
     this.dom.presetBtns.forEach(btn => btn.classList.remove('active'));
   }
 
   startMeditation() {
+    this.audio.resume();
     this.meditationDuration = this.selectedMeditationMinutes * 60000;
     this.meditationStartTime = Date.now();
     this.meditationIntervalEnabled = this.dom.meditationIntervalToggle.checked;
