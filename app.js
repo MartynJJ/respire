@@ -15,7 +15,7 @@ let CONFIG = { ...DEFAULT_CONFIG };
 
 function loadConfig() {
   try {
-    const saved = localStorage.getItem('bw_config');
+    const saved = localStorage.getItem('respire_config');
     if (saved) CONFIG = { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
   } catch (e) {
     CONFIG = { ...DEFAULT_CONFIG };
@@ -23,145 +23,75 @@ function loadConfig() {
 }
 
 function saveConfig() {
-  localStorage.setItem('bw_config', JSON.stringify(CONFIG));
+  localStorage.setItem('respire_config', JSON.stringify(CONFIG));
 }
 
 loadConfig();
 
-if (localStorage.getItem('bw_dark_mode') === 'true') {
-  document.body.classList.add('dark');
+if (localStorage.getItem('respire_dark') === 'true') {
+  document.documentElement.setAttribute('data-theme', 'dark');
 }
 
 class AudioManager {
   constructor() {
-    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    this.isMuted = localStorage.getItem('bw_muted') === 'true';
-    this.useVocals = localStorage.getItem('bw_use_vocals') === 'true';
-    this.speechSynthesis = window.speechSynthesis;
+    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    this.isMuted = localStorage.getItem('respire_muted') === 'true';
   }
 
   resume() {
-    if (this.audioContext.state === 'suspended') this.audioContext.resume();
+    if (this.ctx.state === 'suspended') this.ctx.resume();
   }
 
-  play(frequency, duration, type = 'sine', volume = 0.3) {
+  play(freq, ms, type = 'sine', vol = 0.3) {
     if (this.isMuted) return;
-    const now = this.audioContext.currentTime;
-    const osc = this.audioContext.createOscillator();
-    const gain = this.audioContext.createGain();
-    osc.connect(gain);
-    gain.connect(this.audioContext.destination);
-    osc.frequency.value = frequency;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
     osc.type = type;
-    gain.gain.setValueAtTime(volume, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(vol, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + ms / 1000);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
     osc.start(now);
-    osc.stop(now + duration);
+    osc.stop(now + ms / 1000);
   }
 
-  speak(text, priority = false) {
-    if (this.isMuted || !this.useVocals) return;
-    if (priority) this.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.9;
-    utterance.pitch = 1;
-    utterance.volume = 0.8;
-    this.speechSynthesis.speak(utterance);
-  }
-
-  inhaleSound() {
-    if (this.useVocals) this.speak('Inhale');
-    else this.play(220, 0.3, 'sine', 0.2);
-  }
-
-  exhaleSound() {
-    if (this.useVocals) this.speak('Exhale');
-    else this.play(330, 0.3, 'sine', 0.2);
-  }
-
-  holdStartSound() { this.play(110, 0.8, 'sine', 0.3); }
-  recoveryStartSound() { this.play(440, 0.4, 'sine', 0.3); }
-  countdownBeep() { this.play(880, 0.1, 'sine', 0.2); }
-  meditationIntervalSound() { this.play(528, 2.0, 'sine', 0.25); }
-  meditationEndSound() {
-    this.play(440, 3.0, 'sine', 0.55);
-    setTimeout(() => this.play(880, 2.5, 'sine', 0.4), 50);
-  }
-
-  toggleMute() {
-    this.isMuted = !this.isMuted;
-    localStorage.setItem('bw_muted', this.isMuted);
-    return this.isMuted;
-  }
-
-  toggleVocals() {
-    this.useVocals = !this.useVocals;
-    localStorage.setItem('bw_use_vocals', this.useVocals);
-    return this.useVocals;
+  bell() {
+    this.play(528, 600, 'sine', 0.25);
   }
 }
 
-class HapticManager {
-  constructor() {
-    this.supported = typeof navigator.vibrate === 'function';
-    this.isEnabled = localStorage.getItem('bw_haptic_enabled') === 'true';
-    this.INHALE = [30];
-    this.EXHALE = [30, 80, 30];
-    this.HOLD_START = [80, 60, 80, 60, 80];
-    this.RECOVERY_START = [200];
-  }
+const audio = new AudioManager();
 
-  vibrate(pattern) {
-    if (!this.supported || !this.isEnabled) return;
-    navigator.vibrate(pattern);
-  }
-
-  toggle() {
-    this.isEnabled = !this.isEnabled;
-    localStorage.setItem('bw_haptic_enabled', this.isEnabled);
-    return this.isEnabled;
-  }
+function easeInOutSine(t) {
+  return -(Math.cos(Math.PI * t) - 1) / 2;
 }
 
-class BreathworkApp {
+class BreathingApp {
   constructor() {
-    this.audio = new AudioManager();
-    this.haptic = new HapticManager();
     this.state = 'IDLE';
-    this.currentRound = 1;
-    this.totalRounds = CONFIG.defaultRounds;
-    this.currentBreath = 0;
+    this.currentRound = 0;
+    this.totalRounds = 3;
+    this.currentCycle = 0;
     this.holdStartTime = null;
     this.roundHoldTimes = [];
-    this.sessionStartTime = new Date();
+    this.sessionStartTime = null;
     this.timerId = null;
     this.meditationStartTime = null;
-    this.meditationDuration = CONFIG.meditationDurationMs;
-    this.meditationIntervalEnabled = CONFIG.meditationIntervalEnabled;
-    this.meditationTimerId = null;
-    this.selectedMeditationMinutes = 10;
-
-    this.isPaused = false;
-    this.breathTimerIds = [];
-    this.breathCurrentPhase = null;
-    this.breathPhaseEnteredAt = null;
-    this.pausedHoldElapsed = 0;
-    this.recoveryEndTime = 0;
-    this.recoveryRemainingAtPause = 0;
+    this.meditationDuration = 10;
+    this.meditationTimer = null;
 
     this.initDOM();
-    this.attachEventListeners();
-    this.updateMuteButton();
-    this.updateVocalsButton();
-    this.updateDarkModeButton();
-    this.updateHapticButton();
-    this.renderLogs();
+    this.attachListeners();
   }
 
   initDOM() {
     this.dom = {
-      stageBreathe: document.getElementById('stage-breathing'),
       stageIdle: document.getElementById('stage-idle'),
+      stageBreathe: document.getElementById('stage-breathing'),
       stageHold: document.getElementById('stage-hold'),
       stageRecovery: document.getElementById('stage-recovery'),
       stageComplete: document.getElementById('stage-complete'),
@@ -169,22 +99,17 @@ class BreathworkApp {
       roundBadge: document.getElementById('round-badge'),
       holdRoundBadge: document.getElementById('hold-round-badge'),
       recoveryRoundBadge: document.getElementById('recovery-round-badge'),
-      meditationBadge: document.getElementById('meditation-badge'),
-      meditationTimer: document.getElementById('meditation-timer'),
-      meditationIntervalLabel: document.getElementById('meditation-interval-label'),
       circle: document.getElementById('circle'),
       breathingLabel: document.getElementById('breathing-label'),
       breathCounter: document.getElementById('breath-counter'),
       holdTimer: document.getElementById('hold-timer'),
       recoveryTimer: document.getElementById('recovery-timer'),
       sessionSummary: document.getElementById('session-summary'),
-      btnMute: document.getElementById('btn-mute'),
       btnPrimary: document.querySelectorAll('#btn-primary'),
       btnDone: document.getElementById('btn-done'),
+      meditationTimer: document.getElementById('meditation-timer'),
+      meditationIntervalLabel: document.getElementById('meditation-interval-label'),
       btnStopMeditation: document.getElementById('btn-stop-meditation'),
-      btnClearLogs: document.getElementById('btn-clear-logs'),
-      logsTable: document.getElementById('logs-table'),
-      logsTbody: document.getElementById('logs-tbody'),
       roundsInput: document.getElementById('rounds-input'),
       btnAdvanced: document.getElementById('btn-advanced'),
       btnStartMeditation: document.getElementById('btn-start-meditation'),
@@ -205,750 +130,436 @@ class BreathworkApp {
       exhaleDurationValue: document.getElementById('exhale-duration-value'),
       pauseDurationValue: document.getElementById('pause-duration-value'),
       recoveryDurationValue: document.getElementById('recovery-duration-value'),
-      btnPresetBox: document.getElementById('btn-preset-box'),
-      btnPreset478: document.getElementById('btn-preset-478'),
-      breathworkConfig: document.getElementById('breathwork-config'),
-      meditationConfig: document.getElementById('meditation-config'),
-      meditationIntervalToggle: document.getElementById('meditation-interval-toggle'),
-      meditationCustomMinutes: document.getElementById('meditation-custom-minutes'),
-      tabBtns: document.querySelectorAll('.tab-btn'),
-      presetBtns: document.querySelectorAll('.preset-btn'),
-      btnPauseBreathe: document.getElementById('btn-pause-breathe'),
-      btnPauseHold: document.getElementById('btn-pause-hold'),
-      btnPauseRecovery: document.getElementById('btn-pause-recovery'),
+      btnMute: document.getElementById('btn-mute'),
       btnDarkMode: document.getElementById('btn-dark-mode'),
       btnHaptic: document.getElementById('btn-haptic'),
+      logsTbody: document.getElementById('logs-tbody'),
+      btnClearLogs: document.getElementById('btn-clear-logs'),
+      btnPauseBreathing: document.getElementById('btn-pause-breathe'),
+      meditationIntervalToggle: document.getElementById('meditation-interval-toggle'),
+      meditationCustomMinutes: document.getElementById('meditation-custom-minutes'),
+      btnPresetBox: document.getElementById('btn-preset-box'),
+      btnPreset478: document.getElementById('btn-preset-478'),
+      tabBreatheBtn: document.querySelector('[data-mode="breathwork"]'),
+      tabMeditateBtn: document.querySelector('[data-mode="meditate"]'),
+      breathworkConfig: document.getElementById('breathwork-config'),
+      meditationConfig: document.getElementById('meditation-config'),
     };
   }
 
-  attachEventListeners() {
+  attachListeners() {
+    this.dom.btnPrimary.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (this.state === 'IDLE') this.startBreathwork();
+      });
+    });
+
+    this.dom.btnAdvanced.addEventListener('click', () => this.openModal());
+    this.dom.btnModalClose.addEventListener('click', () => this.closeModal());
+    this.dom.modalBackdrop.addEventListener('click', () => this.closeModal());
+    this.dom.btnModalSave.addEventListener('click', () => this.saveAdvanced());
+    this.dom.btnResetDefaults.addEventListener('click', () => this.resetDefaults());
+
     this.dom.btnMute.addEventListener('click', () => this.toggleMute());
-    this.dom.btnVocals = document.getElementById('btn-vocals');
-    if (this.dom.btnVocals) {
-      this.dom.btnVocals.addEventListener('click', () => this.toggleVocals());
-    }
-    if (this.dom.btnDarkMode) {
-      this.dom.btnDarkMode.addEventListener('click', () => this.toggleDarkMode());
-    }
-    if (this.dom.btnHaptic) {
-      this.dom.btnHaptic.addEventListener('click', () => this.toggleHaptic());
-    }
+    this.dom.btnDarkMode.addEventListener('click', () => this.toggleDarkMode());
+    this.dom.btnHaptic.addEventListener('click', () => this.toggleHaptic());
 
     this.dom.btnClearLogs.addEventListener('click', () => this.clearLogs());
-    this.dom.roundsInput.addEventListener('change', (e) => {
-      this.totalRounds = Math.max(1, parseInt(e.target.value) || CONFIG.defaultRounds);
-    });
 
-    this.dom.btnAdvanced.addEventListener('click', () => this.openAdvancedModal());
-    this.dom.btnModalClose.addEventListener('click', () => this.closeAdvancedModal());
-    this.dom.modalBackdrop.addEventListener('click', () => this.closeAdvancedModal());
-    this.dom.btnModalSave.addEventListener('click', () => this.saveAdvancedOptions());
-    this.dom.btnResetDefaults.addEventListener('click', () => this.resetToDefaults());
-
-    this.dom.breathingCyclesInput.addEventListener('input', (e) => {
-      this.dom.breathingCyclesValue.textContent = e.target.value;
-    });
-    this.dom.inhaleDurationInput.addEventListener('input', (e) => {
-      this.dom.inhaleDurationValue.textContent = (parseInt(e.target.value) / 1000).toFixed(1) + 's';
-    });
-    this.dom.holdDurationInput.addEventListener('input', (e) => {
-      this.dom.holdDurationValue.textContent = (parseInt(e.target.value) / 1000).toFixed(1) + 's';
-    });
-    this.dom.exhaleDurationInput.addEventListener('input', (e) => {
-      this.dom.exhaleDurationValue.textContent = (parseInt(e.target.value) / 1000).toFixed(1) + 's';
-    });
-    this.dom.pauseDurationInput.addEventListener('input', (e) => {
-      this.dom.pauseDurationValue.textContent = (parseInt(e.target.value) / 1000).toFixed(1) + 's';
-    });
-    this.dom.recoveryDurationInput.addEventListener('input', (e) => {
-      this.dom.recoveryDurationValue.textContent = Math.round(parseInt(e.target.value) / 1000) + 's';
-    });
-
-    this.dom.btnPresetBox.addEventListener('click', () => this.applyBoxBreathingPreset());
-    this.dom.btnPreset478.addEventListener('click', () => this.apply478Preset());
-
-    this.dom.btnPauseBreathe.addEventListener('click', () => this.togglePause());
-    this.dom.btnPauseHold.addEventListener('click', () => this.togglePause());
-    this.dom.btnPauseRecovery.addEventListener('click', () => this.togglePause());
-
-    this.dom.tabBtns.forEach(btn => btn.addEventListener('click', (e) => this.switchTab(e.target.dataset.mode)));
-    this.dom.presetBtns.forEach(btn => btn.addEventListener('click', (e) => this.selectPreset(parseInt(e.target.dataset.minutes))));
-    this.dom.meditationCustomMinutes.addEventListener('input', (e) => this.selectCustomDuration(parseInt(e.target.value)));
-
-    this.dom.meditationIntervalToggle.addEventListener('change', (e) => {
-      CONFIG.meditationIntervalEnabled = e.target.checked;
-      saveConfig();
-    });
+    this.dom.btnPauseBreathing.addEventListener('click', () => this.pauseBreathing());
+    this.dom.btnDone.addEventListener('click', () => this.finishHold());
 
     this.dom.btnStartMeditation.addEventListener('click', () => this.startMeditation());
     this.dom.btnStopMeditation.addEventListener('click', () => this.stopMeditation());
 
-    document.querySelectorAll('button#btn-primary').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        if (this.state === 'IDLE') this.startSession();
-        else if (this.state === 'HOLD' && btn.id !== 'btn-done') this.startHold();
-        else if (this.state === 'COMPLETE') this.saveAndViewLogs();
+    this.dom.tabBreatheBtn.addEventListener('click', () => this.switchToBreathe());
+    this.dom.tabMeditateBtn.addEventListener('click', () => this.switchToMeditate());
+
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        const mins = parseInt(e.target.dataset.minutes);
+        this.meditationDuration = mins;
+        this.dom.meditationCustomMinutes.value = mins;
       });
     });
 
-    this.dom.btnDone.addEventListener('click', () => this.endHold());
-  }
-
-  setState(newState) {
-    this.isPaused = false;
-    this.breathTimerIds.forEach(id => clearTimeout(id));
-    this.breathTimerIds = [];
-    clearTimeout(this.timerId);
-    clearTimeout(this.meditationTimerId);
-    this.timerId = null;
-    this.dom.circle.classList.remove('paused');
-    this.updatePauseButton(false);
-
-    this.hideAllStages();
-    this.state = newState;
-
-    switch (newState) {
-      case 'IDLE':
-        this.dom.stageIdle.classList.remove('hidden');
-        this.updateMuteButton();
-        break;
-      case 'BREATHING':
-        this.dom.stageBreathe.classList.remove('hidden');
-        this.startBreathingCycle();
-        break;
-      case 'HOLD':
-        this.dom.stageHold.classList.remove('hidden');
-        this.dom.btnDone.classList.add('hidden');
-        this.dom.btnPauseHold.classList.add('hidden');
-        document.querySelector('#stage-hold button#btn-primary').classList.remove('hidden');
-        break;
-      case 'RECOVERY':
-        this.dom.stageRecovery.classList.remove('hidden');
-        this.startRecovery();
-        break;
-      case 'COMPLETE':
-        this.dom.stageComplete.classList.remove('hidden');
-        this.renderSessionSummary();
-        break;
-      case 'MEDITATION':
-        this.dom.stageMeditation.classList.remove('hidden');
-        this.runMeditationTimer();
-        break;
-    }
-  }
-
-  hideAllStages() {
-    [
-      this.dom.stageIdle,
-      this.dom.stageBreathe,
-      this.dom.stageHold,
-      this.dom.stageRecovery,
-      this.dom.stageComplete,
-      this.dom.stageMeditation,
-    ].forEach((stage) => stage.classList.add('hidden'));
-  }
-
-  startSession() {
-    this.audio.resume();
-    this.currentRound = 1;
-    this.roundHoldTimes = [];
-    this.sessionStartTime = new Date();
-    this.setState('BREATHING');
-  }
-
-  startBreathingCycle() {
-    this.currentBreath = 0;
-    this.cycleBreaths();
-  }
-
-  setBreathPhase(phase) {
-    this.breathCurrentPhase = phase;
-    this.breathPhaseEnteredAt = Date.now();
-  }
-
-  addBreathTimer(id) {
-    this.breathTimerIds.push(id);
-  }
-
-  cycleBreaths() {
-    if (this.isPaused) return;
-    if (this.currentBreath >= CONFIG.breathCount) {
-      this.dom.roundBadge.textContent = `Round ${this.currentRound} of ${this.totalRounds} — Ready to Hold`;
-      this.setState('HOLD');
-      return;
-    }
-
-    this.currentBreath++;
-    this.dom.breathCounter.textContent = `${this.currentBreath} / ${CONFIG.breathCount}`;
-    this.dom.roundBadge.textContent = `Round ${this.currentRound} of ${this.totalRounds}`;
-
-    this.setBreathPhase('inhale');
-    this.dom.breathingLabel.textContent = 'INHALE';
-    this.audio.inhaleSound();
-    this.haptic.vibrate(this.haptic.INHALE);
-    this.dom.circle.style.transition = `transform ${CONFIG.breathInMs}ms ease-in-out`;
-    this.dom.circle.style.transform = 'scale(1.2)';
-
-    if (CONFIG.breathHoldMs > 0) {
-      this.addBreathTimer(setTimeout(() => {
-        if (!this.isPaused) {
-          this.setBreathPhase('breath-hold');
-          this.dom.breathingLabel.textContent = 'HOLD';
-        }
-      }, CONFIG.breathInMs));
-    }
-
-    this.addBreathTimer(setTimeout(() => {
-      if (!this.isPaused) {
-        this.setBreathPhase('exhale');
-        this.dom.breathingLabel.textContent = 'EXHALE';
-        this.audio.exhaleSound();
-        this.haptic.vibrate(this.haptic.EXHALE);
-        this.dom.circle.style.transition = `transform ${CONFIG.breathOutMs}ms ease-in-out`;
-        this.dom.circle.style.transform = 'scale(0.8)';
-      }
-    }, CONFIG.breathInMs + CONFIG.breathHoldMs));
-
-    this.addBreathTimer(setTimeout(() => {
-      if (!this.isPaused) {
-        this.setBreathPhase(null);
-        this.cycleBreaths();
-      }
-    }, CONFIG.breathInMs + CONFIG.breathHoldMs + CONFIG.breathOutMs + CONFIG.breathPauseMs));
-  }
-
-  togglePause() {
-    if (this.isPaused) this.resumeSession();
-    else this.pauseSession();
-  }
-
-  pauseSession() {
-    this.isPaused = true;
-
-    this.breathTimerIds.forEach(id => clearTimeout(id));
-    this.breathTimerIds = [];
-    clearTimeout(this.timerId);
-    this.timerId = null;
-
-    if (this.state === 'BREATHING') {
-      const computed = window.getComputedStyle(this.dom.circle).transform;
-      this.dom.circle.style.transition = 'none';
-      this.dom.circle.style.transform = computed;
-      this.dom.circle.classList.add('paused');
-    }
-
-    if (this.state === 'HOLD') {
-      this.pausedHoldElapsed = Date.now() - this.holdStartTime;
-    }
-
-    if (this.state === 'RECOVERY') {
-      this.recoveryRemainingAtPause = Math.max(0, this.recoveryEndTime - Date.now());
-    }
-
-    this.updatePauseButton(true);
-  }
-
-  resumeSession() {
-    this.isPaused = false;
-    this.dom.circle.classList.remove('paused');
-
-    if (this.state === 'BREATHING') {
-      this.resumeBreathing();
-    } else if (this.state === 'HOLD') {
-      this.holdStartTime = Date.now() - this.pausedHoldElapsed;
-      this.updateHoldTimer();
-    } else if (this.state === 'RECOVERY') {
-      this.recoveryEndTime = Date.now() + this.recoveryRemainingAtPause;
-      this.tickRecovery();
-    }
-
-    this.updatePauseButton(false);
-  }
-
-  resumeBreathing() {
-    if (!this.breathPhaseEnteredAt || !this.breathCurrentPhase) {
-      this.cycleBreaths();
-      return;
-    }
-
-    const elapsed = Date.now() - this.breathPhaseEnteredAt;
-    const phase = this.breathCurrentPhase;
-
-    if (phase === 'inhale') {
-      const rem = Math.max(50, CONFIG.breathInMs - elapsed);
-      this.dom.circle.style.transition = `transform ${rem}ms ease-in-out`;
-      this.dom.circle.style.transform = 'scale(1.2)';
-
-      if (CONFIG.breathHoldMs > 0) {
-        this.addBreathTimer(setTimeout(() => {
-          if (!this.isPaused) { this.setBreathPhase('breath-hold'); this.dom.breathingLabel.textContent = 'HOLD'; }
-        }, rem));
-      }
-      this.addBreathTimer(setTimeout(() => {
-        if (!this.isPaused) {
-          this.setBreathPhase('exhale');
-          this.dom.breathingLabel.textContent = 'EXHALE';
-          this.audio.exhaleSound();
-          this.haptic.vibrate(this.haptic.EXHALE);
-          this.dom.circle.style.transition = `transform ${CONFIG.breathOutMs}ms ease-in-out`;
-          this.dom.circle.style.transform = 'scale(0.8)';
-        }
-      }, rem + CONFIG.breathHoldMs));
-      this.addBreathTimer(setTimeout(() => {
-        if (!this.isPaused) { this.setBreathPhase(null); this.cycleBreaths(); }
-      }, rem + CONFIG.breathHoldMs + CONFIG.breathOutMs + CONFIG.breathPauseMs));
-
-    } else if (phase === 'breath-hold') {
-      const rem = Math.max(50, CONFIG.breathHoldMs - elapsed);
-      this.addBreathTimer(setTimeout(() => {
-        if (!this.isPaused) {
-          this.setBreathPhase('exhale');
-          this.dom.breathingLabel.textContent = 'EXHALE';
-          this.audio.exhaleSound();
-          this.haptic.vibrate(this.haptic.EXHALE);
-          this.dom.circle.style.transition = `transform ${CONFIG.breathOutMs}ms ease-in-out`;
-          this.dom.circle.style.transform = 'scale(0.8)';
-        }
-      }, rem));
-      this.addBreathTimer(setTimeout(() => {
-        if (!this.isPaused) { this.setBreathPhase(null); this.cycleBreaths(); }
-      }, rem + CONFIG.breathOutMs + CONFIG.breathPauseMs));
-
-    } else if (phase === 'exhale') {
-      const rem = Math.max(50, CONFIG.breathOutMs - elapsed);
-      this.dom.circle.style.transition = `transform ${rem}ms ease-in-out`;
-      this.dom.circle.style.transform = 'scale(0.8)';
-      this.addBreathTimer(setTimeout(() => {
-        if (!this.isPaused) { this.setBreathPhase(null); this.cycleBreaths(); }
-      }, rem + CONFIG.breathPauseMs));
-
-    } else {
-      this.cycleBreaths();
-    }
-  }
-
-  updatePauseButton(isPaused) {
-    [this.dom.btnPauseBreathe, this.dom.btnPauseHold, this.dom.btnPauseRecovery].forEach(btn => {
-      if (!btn) return;
-      btn.textContent = isPaused ? 'Resume' : 'Pause';
-      btn.classList.toggle('pause-active', isPaused);
+    this.dom.meditationCustomMinutes.addEventListener('change', (e) => {
+      this.meditationDuration = parseInt(e.target.value) || 10;
     });
+
+    [
+      ['breathing-cycles', 'breathCount'],
+      ['inhale-duration', 'breathInMs'],
+      ['hold-duration', 'breathHoldMs'],
+      ['exhale-duration', 'breathOutMs'],
+      ['pause-duration', 'breathPauseMs'],
+      ['recovery-duration', 'recoveryHoldMs'],
+    ].forEach(([inputId, configKey]) => {
+      const el = document.getElementById(inputId);
+      el.addEventListener('input', (e) => {
+        let val = parseFloat(e.target.value);
+        if (inputId !== 'breathing-cycles') val *= 1000;
+        CONFIG[configKey] = val;
+        const valueEl = document.getElementById(inputId + '-value');
+        const displayVal = inputId === 'breathing-cycles' ? val : (val / 1000).toFixed(1);
+        valueEl.textContent = displayVal + (inputId === 'breathing-cycles' ? '' : 's');
+      });
+    });
+
+    this.dom.btnPresetBox.addEventListener('click', () => this.applyPreset('box'));
+    this.dom.btnPreset478.addEventListener('click', () => this.applyPreset('478'));
+
+    this.renderLogs();
   }
 
-  startHold() {
-    this.holdStartTime = Date.now();
-    this.dom.btnDone.classList.remove('hidden');
-    this.dom.btnPauseHold.classList.remove('hidden');
-    document.querySelector('#stage-hold button#btn-primary').classList.add('hidden');
+  switchToBreathe() {
+    document.querySelector('[data-mode="breathwork"]').classList.add('active');
+    document.querySelector('[data-mode="meditate"]').classList.remove('active');
+    this.dom.breathworkConfig.classList.remove('hidden');
+    this.dom.meditationConfig.classList.add('hidden');
+  }
+
+  switchToMeditate() {
+    document.querySelector('[data-mode="meditate"]').classList.add('active');
+    document.querySelector('[data-mode="breathwork"]').classList.remove('active');
+    this.dom.meditationConfig.classList.remove('hidden');
+    this.dom.breathworkConfig.classList.add('hidden');
+  }
+
+  showStage(stageEl) {
+    document.querySelectorAll('.stage').forEach(s => s.classList.add('hidden'));
+    stageEl.classList.remove('hidden');
+  }
+
+  startBreathwork() {
+    audio.resume();
+    this.state = 'BREATHING';
+    this.totalRounds = parseInt(this.dom.roundsInput.value) || 3;
+    this.currentRound = 1;
+    this.currentCycle = 0;
+    this.roundHoldTimes = [];
+    this.sessionStartTime = Date.now();
+    this.showStage(this.dom.stageBreathe);
+    this.updateRoundBadge();
+    this.breathePhase('inhale');
+  }
+
+  breathePhase(phase) {
+    const phaseConfigs = {
+      inhale: { label: 'INHALE', duration: CONFIG.breathInMs },
+      holdIn: { label: 'HOLD', duration: CONFIG.breathHoldMs },
+      exhale: { label: 'EXHALE', duration: CONFIG.breathOutMs },
+      holdOut: { label: 'HOLD', duration: CONFIG.breathPauseMs },
+    };
+
+    const config = phaseConfigs[phase];
+    this.dom.breathingLabel.textContent = config.label;
+    audio.play(528, 80, 'sine', 0.1);
+
+    const startTime = Date.now();
+    const duration = config.duration;
+
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, duration - elapsed);
+      const progress = Math.min(1, elapsed / duration);
+
+      let scale;
+      if (phase === 'inhale') {
+        scale = 0.45 + easeInOutSine(progress) * 0.55;
+      } else if (phase === 'exhale') {
+        scale = 1.0 - easeInOutSine(progress) * 0.55;
+      } else {
+        scale = phase === 'holdIn' ? 1.0 : 0.45;
+      }
+
+      this.dom.circle.style.transform = `scale(${scale})`;
+      this.dom.breathCounter.textContent = (remaining / 1000).toFixed(1) + 's';
+
+      if (elapsed < duration) {
+        requestAnimationFrame(animate);
+      } else {
+        this.nextPhase(phase);
+      }
+    };
+
+    animate();
+  }
+
+  nextPhase(phase) {
+    const sequence = {
+      inhale: CONFIG.breathHoldMs > 0 ? 'holdIn' : 'exhale',
+      holdIn: 'exhale',
+      exhale: CONFIG.breathPauseMs > 0 ? 'holdOut' : 'inhale',
+      holdOut: 'inhale',
+    };
+
+    const nextPhase = sequence[phase];
+
+    if (nextPhase === 'inhale') {
+      this.currentCycle++;
+      if (this.currentCycle > CONFIG.breathCount) {
+        this.finishBreathing();
+      } else {
+        this.breathePhase('inhale');
+      }
+    } else {
+      this.breathePhase(nextPhase);
+    }
+  }
+
+  finishBreathing() {
+    this.state = 'HOLD';
+    this.showStage(this.dom.stageHold);
     this.dom.holdRoundBadge.textContent = `Round ${this.currentRound} of ${this.totalRounds}`;
-    this.audio.holdStartSound();
-    this.haptic.vibrate(this.haptic.HOLD_START);
+    this.dom.btnDone.classList.remove('hidden');
+    this.holdStartTime = Date.now();
     this.updateHoldTimer();
   }
 
   updateHoldTimer() {
-    if (this.holdStartTime === null) return;
-
-    const elapsed = Math.floor((Date.now() - this.holdStartTime) / 1000);
-    const mins = Math.floor(elapsed / 60);
-    const secs = elapsed % 60;
-    this.dom.holdTimer.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-
-    if (this.state === 'HOLD' && !this.isPaused) {
-      this.dom.holdTimer.classList.add('pulsing');
-      setTimeout(() => this.dom.holdTimer.classList.remove('pulsing'), 500);
-      this.timerId = setTimeout(() => this.updateHoldTimer(), 1000);
-    }
+    const timer = () => {
+      const elapsed = Date.now() - this.holdStartTime;
+      const secs = Math.floor(elapsed / 1000);
+      const ms = elapsed % 1000;
+      this.dom.holdTimer.textContent = `${secs}:${String(Math.floor(ms / 100)).padStart(1, '0')}`;
+      this.timerId = requestAnimationFrame(timer);
+    };
+    timer();
   }
 
-  endHold() {
-    if (!this.holdStartTime) return;
-    clearTimeout(this.timerId);
-    const holdMs = Date.now() - this.holdStartTime;
-    this.roundHoldTimes.push(holdMs);
-    this.holdStartTime = null;
-    this.setState('RECOVERY');
+  finishHold() {
+    cancelAnimationFrame(this.timerId);
+    const holdTime = Date.now() - this.holdStartTime;
+    this.roundHoldTimes.push(holdTime);
+    this.startRecovery();
+  }
+
+  pauseBreathing() {
+    this.dom.btnPauseBreathing.textContent = 'Pause';
   }
 
   startRecovery() {
+    this.state = 'RECOVERY';
+    this.showStage(this.dom.stageRecovery);
     this.dom.recoveryRoundBadge.textContent = `Round ${this.currentRound} of ${this.totalRounds}`;
-    this.audio.recoveryStartSound();
-    this.haptic.vibrate(this.haptic.RECOVERY_START);
-    this.recoveryEndTime = Date.now() + CONFIG.recoveryHoldMs;
-    this.tickRecovery();
-  }
 
-  tickRecovery() {
-    const remaining = Math.max(0, this.recoveryEndTime - Date.now());
-    const totalSecs = remaining / 1000;
-    const mins = Math.floor(totalSecs / 60);
-    const secs = (totalSecs % 60).toFixed(2);
-    this.dom.recoveryTimer.textContent = `${mins}:${secs.padStart(5, '0')}`;
+    const recoveryMs = CONFIG.recoveryHoldMs;
+    const startTime = Date.now();
 
-    if (remaining <= 3000 && remaining > 0) {
-      this.audio.countdownBeep();
-    }
+    const timer = () => {
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, recoveryMs - elapsed);
+      const secs = remaining / 1000;
+      this.dom.recoveryTimer.textContent = secs.toFixed(1);
 
-    if (remaining > 0) {
-      this.timerId = setTimeout(() => this.tickRecovery(), 100);
-    } else {
-      this.endRecovery();
-    }
-  }
+      const progress = Math.min(1, elapsed / recoveryMs);
+      const scale = easeInOutSine(progress);
+      this.dom.circle.style.transform = `scale(${scale})`;
 
-  endRecovery() {
-    clearTimeout(this.timerId);
-    if (this.currentRound < this.totalRounds) {
-      this.currentRound++;
-      this.setState('BREATHING');
-    } else {
-      this.setState('COMPLETE');
-    }
-  }
-
-  formatMs(ms) {
-    const mins = Math.floor(ms / 60000);
-    const secs = Math.floor((ms % 60000) / 1000);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  }
-
-  renderSessionSummary() {
-    const summary = document.createElement('div');
-    this.roundHoldTimes.forEach((holdMs, idx) => {
-      const div = document.createElement('div');
-      div.className = 'summary-round';
-      const label = document.createElement('span');
-      label.className = 'summary-round-label';
-      label.textContent = `Round ${idx + 1}`;
-      const time = document.createElement('span');
-      time.className = 'summary-round-time';
-      time.textContent = this.formatMs(holdMs);
-      div.append(label, time);
-      summary.appendChild(div);
-    });
-    this.dom.sessionSummary.innerHTML = summary.innerHTML;
-  }
-
-  saveAndViewLogs() {
-    const totalHoldMs = this.roundHoldTimes.reduce((s, t) => s + t, 0);
-    const bestHoldMs = this.roundHoldTimes.length > 0 ? Math.max(...this.roundHoldTimes) : 0;
-    const session = {
-      id: this.sessionStartTime.toISOString(),
-      rounds: this.roundHoldTimes.map((holdMs, idx) => ({ round: idx + 1, holdMs })),
-      roundCount: this.roundHoldTimes.length,
-      totalHoldMs,
-      bestHoldMs,
+      if (elapsed < recoveryMs) {
+        requestAnimationFrame(timer);
+      } else {
+        this.currentRound++;
+        if (this.currentRound <= this.totalRounds) {
+          this.currentCycle = 0;
+          this.updateRoundBadge();
+          this.showStage(this.dom.stageBreathe);
+          this.breathePhase('inhale');
+        } else {
+          this.finishSession();
+        }
+      }
     };
 
-    try {
-      const sessions = JSON.parse(localStorage.getItem('bw_sessions') || '[]');
-      sessions.unshift(session);
-      localStorage.setItem('bw_sessions', JSON.stringify(sessions.slice(0, 50)));
-    } catch (e) {
-      localStorage.setItem('bw_sessions', JSON.stringify([session]));
+    timer();
+  }
+
+  updateRoundBadge() {
+    this.dom.roundBadge.textContent = `Round ${this.currentRound} of ${this.totalRounds}`;
+  }
+
+  finishSession() {
+    this.state = 'COMPLETE';
+    this.showStage(this.dom.stageComplete);
+
+    const bestHold = Math.max(...this.roundHoldTimes);
+    const totalHold = this.roundHoldTimes.reduce((a, b) => a + b, 0);
+
+    const summary = this.roundHoldTimes.map((time, i) => {
+      const secs = (time / 1000).toFixed(1);
+      return `<div class="summary-round"><span class="summary-round-label">Round ${i + 1}</span><span class="summary-round-time">${secs}s</span></div>`;
+    }).join('');
+
+    this.dom.sessionSummary.innerHTML = summary;
+
+    const saveBtn = Array.from(this.dom.btnPrimary).find(btn => btn.closest('#stage-complete'));
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => this.saveSession(bestHold, totalHold), { once: true });
     }
+  }
+
+  saveSession(best, total) {
+    const session = {
+      date: new Date().toISOString(),
+      rounds: this.totalRounds,
+      best: Math.floor(best / 1000),
+      total: Math.floor(total / 1000),
+    };
+
+    let sessions = [];
+    try {
+      sessions = JSON.parse(localStorage.getItem('respire_sessions') || '[]');
+    } catch {}
+    sessions.push(session);
+    localStorage.setItem('respire_sessions', JSON.stringify(sessions));
 
     this.renderLogs();
-    this.setState('IDLE');
-    this.dom.roundsInput.value = CONFIG.defaultRounds;
+    this.state = 'IDLE';
+    this.showStage(this.dom.stageIdle);
+  }
+
+  startMeditation() {
+    audio.resume();
+    this.state = 'MEDITATION';
+    this.meditationStartTime = Date.now();
+    const durationMs = this.meditationDuration * 60 * 1000;
+
+    this.showStage(this.dom.stageMeditation);
+
+    const bellIntervalMs = 60 * 1000;
+    let nextBell = bellIntervalMs;
+
+    const timer = () => {
+      const elapsed = Date.now() - this.meditationStartTime;
+      const remaining = Math.max(0, durationMs - elapsed);
+      const mins = Math.floor(remaining / 60000);
+      const secs = Math.floor((remaining % 60000) / 1000);
+
+      this.dom.meditationTimer.textContent = `${mins}:${String(secs).padStart(2, '0')}`;
+
+      if (this.dom.meditationIntervalToggle.checked && elapsed >= nextBell) {
+        audio.bell();
+        nextBell += bellIntervalMs;
+      }
+
+      if (remaining > 0) {
+        this.meditationTimer = requestAnimationFrame(timer);
+      } else {
+        audio.bell();
+        this.state = 'IDLE';
+        this.showStage(this.dom.stageIdle);
+      }
+    };
+
+    timer();
+  }
+
+  stopMeditation() {
+    if (this.meditationTimer) cancelAnimationFrame(this.meditationTimer);
+    this.state = 'IDLE';
+    this.showStage(this.dom.stageIdle);
+  }
+
+  openModal() {
+    this.dom.modal.classList.remove('hidden');
+    this.dom.modalBackdrop.classList.remove('hidden');
+  }
+
+  closeModal() {
+    this.dom.modal.classList.add('hidden');
+    this.dom.modalBackdrop.classList.add('hidden');
+  }
+
+  saveAdvanced() {
+    saveConfig();
+    this.closeModal();
+  }
+
+  applyPreset(preset) {
+    if (preset === 'box') {
+      CONFIG.breathInMs = 4000;
+      CONFIG.breathHoldMs = 4000;
+      CONFIG.breathOutMs = 4000;
+      CONFIG.breathPauseMs = 4000;
+    } else if (preset === '478') {
+      CONFIG.breathInMs = 4000;
+      CONFIG.breathHoldMs = 7000;
+      CONFIG.breathOutMs = 8000;
+      CONFIG.breathPauseMs = 0;
+    }
+    this.updateSliderDisplays();
+  }
+
+  resetDefaults() {
+    CONFIG = { ...DEFAULT_CONFIG };
+    this.updateSliderDisplays();
+  }
+
+  updateSliderDisplays() {
+    this.dom.breathingCyclesInput.value = CONFIG.breathCount;
+    this.dom.inhaleDurationInput.value = CONFIG.breathInMs / 1000;
+    this.dom.holdDurationInput.value = CONFIG.breathHoldMs / 1000;
+    this.dom.exhaleDurationInput.value = CONFIG.breathOutMs / 1000;
+    this.dom.pauseDurationInput.value = CONFIG.breathPauseMs / 1000;
+    this.dom.recoveryDurationInput.value = CONFIG.recoveryHoldMs / 1000;
+
+    this.dom.breathingCyclesValue.textContent = CONFIG.breathCount;
+    this.dom.inhaleDurationValue.textContent = (CONFIG.breathInMs / 1000).toFixed(1) + 's';
+    this.dom.holdDurationValue.textContent = (CONFIG.breathHoldMs / 1000).toFixed(1) + 's';
+    this.dom.exhaleDurationValue.textContent = (CONFIG.breathOutMs / 1000).toFixed(1) + 's';
+    this.dom.pauseDurationValue.textContent = (CONFIG.breathPauseMs / 1000).toFixed(1) + 's';
+    this.dom.recoveryDurationValue.textContent = (CONFIG.recoveryHoldMs / 1000).toFixed(1) + 's';
+  }
+
+  toggleMute() {
+    audio.isMuted = !audio.isMuted;
+    localStorage.setItem('respire_muted', audio.isMuted);
+    this.dom.btnMute.classList.toggle('muted');
+  }
+
+  toggleDarkMode() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    if (isDark) {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('respire_dark', 'false');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      localStorage.setItem('respire_dark', 'true');
+    }
+  }
+
+  toggleHaptic() {
+    this.dom.btnHaptic.classList.toggle('muted');
   }
 
   renderLogs() {
     let sessions = [];
     try {
-      sessions = JSON.parse(localStorage.getItem('bw_sessions') || '[]');
-    } catch (e) {
-      sessions = [];
-    }
+      sessions = JSON.parse(localStorage.getItem('respire_sessions') || '[]');
+    } catch {}
 
-    this.dom.logsTbody.innerHTML = '';
-
-    if (sessions.length === 0) {
-      const tr = document.createElement('tr');
-      const td = document.createElement('td');
-      td.colSpan = 3;
-      td.className = 'empty-logs';
-      td.textContent = 'No sessions yet';
-      tr.appendChild(td);
-      this.dom.logsTbody.appendChild(tr);
+    if (!sessions.length) {
+      this.dom.logsTbody.innerHTML = '<tr><td colspan="3">No sessions yet</td></tr>';
       return;
     }
 
-    const allTimeBest = sessions.reduce((best, s) => {
-      const b = s.bestHoldMs != null ? s.bestHoldMs
-        : (s.rounds.length > 0 ? Math.max(...s.rounds.map(r => r.holdMs)) : 0);
-      return Math.max(best, b);
-    }, 0);
+    const rows = sessions.map(s => {
+      const date = new Date(s.date).toLocaleDateString();
+      return `<tr><td>${date}</td><td>${s.rounds}</td><td>${s.best}s / ${s.total}s</td></tr>`;
+    }).join('');
 
-    sessions.slice(0, 10).forEach((session) => {
-      const date = new Date(session.id);
-      const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' '
-        + date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      const roundCount = session.roundCount != null ? session.roundCount : session.rounds.length;
-      const bestHoldMs = session.bestHoldMs != null ? session.bestHoldMs
-        : (session.rounds.length > 0 ? Math.max(...session.rounds.map(r => r.holdMs)) : 0);
-      const totalHoldMs = session.totalHoldMs != null ? session.totalHoldMs
-        : session.rounds.reduce((s, r) => s + r.holdMs, 0);
-      const isPB = bestHoldMs > 0 && bestHoldMs === allTimeBest;
-
-      const tr = document.createElement('tr');
-      if (isPB) tr.classList.add('pb-row');
-
-      const td1 = document.createElement('td');
-      td1.textContent = dateStr;
-
-      const td2 = document.createElement('td');
-      td2.textContent = roundCount;
-
-      const td3 = document.createElement('td');
-      td3.textContent = this.formatMs(bestHoldMs);
-      if (isPB) {
-        const badge = document.createElement('span');
-        badge.className = 'pb-badge';
-        badge.textContent = 'PB';
-        td3.appendChild(badge);
-      }
-      td3.appendChild(document.createTextNode(` / ${this.formatMs(totalHoldMs)}`));
-
-      tr.append(td1, td2, td3);
-      this.dom.logsTbody.appendChild(tr);
-    });
+    this.dom.logsTbody.innerHTML = rows;
   }
 
   clearLogs() {
-    if (confirm('Clear all session logs? This cannot be undone.')) {
-      localStorage.removeItem('bw_sessions');
+    if (confirm('Clear all sessions?')) {
+      localStorage.removeItem('respire_sessions');
       this.renderLogs();
     }
   }
-
-  toggleMute() {
-    this.audio.toggleMute();
-    this.updateMuteButton();
-  }
-
-  updateMuteButton() {
-    if (this.audio.isMuted) {
-      this.dom.btnMute.textContent = '🔇';
-      this.dom.btnMute.classList.add('muted');
-    } else {
-      this.dom.btnMute.textContent = '🔊';
-      this.dom.btnMute.classList.remove('muted');
-    }
-  }
-
-  toggleVocals() {
-    this.audio.toggleVocals();
-    this.updateVocalsButton();
-  }
-
-  updateVocalsButton() {
-    if (!this.dom.btnVocals) return;
-    if (this.audio.useVocals) {
-      this.dom.btnVocals.textContent = '🎤';
-      this.dom.btnVocals.classList.add('active');
-    } else {
-      this.dom.btnVocals.textContent = '🎵';
-      this.dom.btnVocals.classList.remove('active');
-    }
-  }
-
-  toggleDarkMode() {
-    document.body.classList.toggle('dark');
-    const isDark = document.body.classList.contains('dark');
-    localStorage.setItem('bw_dark_mode', isDark);
-    this.updateDarkModeButton();
-  }
-
-  updateDarkModeButton() {
-    if (!this.dom.btnDarkMode) return;
-    const isDark = document.body.classList.contains('dark');
-    this.dom.btnDarkMode.textContent = isDark ? '☀️' : '🌙';
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', isDark ? '#1a1a2e' : '#667eea');
-  }
-
-  toggleHaptic() {
-    this.haptic.toggle();
-    this.updateHapticButton();
-  }
-
-  updateHapticButton() {
-    if (!this.dom.btnHaptic) return;
-    if (!this.haptic.supported) {
-      this.dom.btnHaptic.classList.add('haptic-unavailable');
-      return;
-    }
-    if (this.haptic.isEnabled) {
-      this.dom.btnHaptic.classList.add('active');
-      this.dom.btnHaptic.classList.remove('muted');
-    } else {
-      this.dom.btnHaptic.classList.remove('active');
-      this.dom.btnHaptic.classList.add('muted');
-    }
-  }
-
-  openAdvancedModal() {
-    this.dom.breathingCyclesInput.value = CONFIG.breathCount;
-    this.dom.breathingCyclesValue.textContent = CONFIG.breathCount;
-    this.dom.inhaleDurationInput.value = CONFIG.breathInMs;
-    this.dom.inhaleDurationValue.textContent = (CONFIG.breathInMs / 1000).toFixed(1) + 's';
-    this.dom.holdDurationInput.value = CONFIG.breathHoldMs;
-    this.dom.holdDurationValue.textContent = (CONFIG.breathHoldMs / 1000).toFixed(1) + 's';
-    this.dom.exhaleDurationInput.value = CONFIG.breathOutMs;
-    this.dom.exhaleDurationValue.textContent = (CONFIG.breathOutMs / 1000).toFixed(1) + 's';
-    this.dom.pauseDurationInput.value = CONFIG.breathPauseMs;
-    this.dom.pauseDurationValue.textContent = (CONFIG.breathPauseMs / 1000).toFixed(1) + 's';
-    this.dom.recoveryDurationInput.value = CONFIG.recoveryHoldMs;
-    this.dom.recoveryDurationValue.textContent = Math.round(CONFIG.recoveryHoldMs / 1000) + 's';
-
-    this.dom.modal.classList.remove('hidden');
-    this.dom.modalBackdrop.classList.remove('hidden');
-  }
-
-  closeAdvancedModal() {
-    this.dom.modal.classList.add('hidden');
-    this.dom.modalBackdrop.classList.add('hidden');
-  }
-
-  saveAdvancedOptions() {
-    CONFIG.breathCount = parseInt(this.dom.breathingCyclesInput.value) || DEFAULT_CONFIG.breathCount;
-    CONFIG.breathInMs = parseInt(this.dom.inhaleDurationInput.value) || DEFAULT_CONFIG.breathInMs;
-    CONFIG.breathHoldMs = parseInt(this.dom.holdDurationInput.value) || 0;
-    CONFIG.breathOutMs = parseInt(this.dom.exhaleDurationInput.value) || DEFAULT_CONFIG.breathOutMs;
-    CONFIG.breathPauseMs = parseInt(this.dom.pauseDurationInput.value) || 0;
-    CONFIG.recoveryHoldMs = parseInt(this.dom.recoveryDurationInput.value) || DEFAULT_CONFIG.recoveryHoldMs;
-    saveConfig();
-    this.closeAdvancedModal();
-  }
-
-  resetToDefaults() {
-    CONFIG = { ...DEFAULT_CONFIG };
-    saveConfig();
-    this.openAdvancedModal();
-  }
-
-  applyBoxBreathingPreset() {
-    CONFIG.breathInMs = 4000;
-    CONFIG.breathHoldMs = 4000;
-    CONFIG.breathOutMs = 4000;
-    CONFIG.breathPauseMs = 4000;
-    saveConfig();
-    this.openAdvancedModal();
-  }
-
-  apply478Preset() {
-    CONFIG.breathInMs = 4000;
-    CONFIG.breathHoldMs = 7000;
-    CONFIG.breathOutMs = 8000;
-    CONFIG.breathPauseMs = 0;
-    saveConfig();
-    this.openAdvancedModal();
-  }
-
-  switchTab(mode) {
-    this.dom.tabBtns.forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.mode === mode);
-    });
-    if (mode === 'breathwork') {
-      this.dom.breathworkConfig.classList.remove('hidden');
-      this.dom.meditationConfig.classList.add('hidden');
-    } else {
-      this.dom.breathworkConfig.classList.add('hidden');
-      this.dom.meditationConfig.classList.remove('hidden');
-    }
-  }
-
-  selectPreset(minutes) {
-    this.selectedMeditationMinutes = minutes;
-    this.dom.meditationCustomMinutes.value = minutes;
-    this.dom.presetBtns.forEach(btn => {
-      btn.classList.toggle('active', parseInt(btn.dataset.minutes) === minutes);
-    });
-  }
-
-  selectCustomDuration(minutes) {
-    const val = Math.max(1, parseInt(minutes) || 1);
-    this.selectedMeditationMinutes = val;
-    this.dom.presetBtns.forEach(btn => btn.classList.remove('active'));
-  }
-
-  startMeditation() {
-    this.audio.resume();
-    this.meditationDuration = this.selectedMeditationMinutes * 60000;
-    this.meditationStartTime = Date.now();
-    this.meditationIntervalEnabled = this.dom.meditationIntervalToggle.checked;
-    this.setState('MEDITATION');
-  }
-
-  runMeditationTimer() {
-    if (this.meditationStartTime === null) return;
-
-    const elapsed = Date.now() - this.meditationStartTime;
-    const remaining = this.meditationDuration - elapsed;
-
-    if (remaining <= 0) {
-      this.audio.meditationEndSound();
-      this.meditationStartTime = null;
-      this.setState('IDLE');
-      return;
-    }
-
-    if (this.meditationIntervalEnabled) {
-      const elapsedSecs = Math.floor(elapsed / 1000);
-      const prevElapsedSecs = Math.floor((elapsed - 100) / 1000);
-      if (elapsedSecs > 0 && elapsedSecs % 60 === 0 && prevElapsedSecs % 60 !== 0) {
-        this.audio.meditationIntervalSound();
-      }
-    }
-
-    const remainingSecs = Math.floor(remaining / 1000);
-    const mins = Math.floor(remainingSecs / 60);
-    const secs = remainingSecs % 60;
-    this.dom.meditationTimer.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-
-    if (this.meditationIntervalEnabled) {
-      const elapsedSecs = Math.floor(elapsed / 1000);
-      const nextIntervalSecs = Math.ceil((elapsedSecs + 1) / 60) * 60;
-      const secsToNext = nextIntervalSecs - elapsedSecs;
-      if (secsToNext <= 60 && secsToNext > 0) {
-        const nextMins = Math.floor(secsToNext / 60);
-        const nextSecs = secsToNext % 60;
-        this.dom.meditationIntervalLabel.textContent = `Next bell in ${nextMins}:${nextSecs.toString().padStart(2, '0')}`;
-      }
-    } else {
-      this.dom.meditationIntervalLabel.textContent = '';
-    }
-
-    if (this.state === 'MEDITATION') {
-      this.meditationTimerId = setTimeout(() => this.runMeditationTimer(), 100);
-    }
-  }
-
-  stopMeditation() {
-    clearTimeout(this.meditationTimerId);
-    this.meditationStartTime = null;
-    this.setState('IDLE');
-  }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  let lastTouchEnd = 0;
-  document.addEventListener('touchend', (e) => {
-    const now = Date.now();
-    if (now - lastTouchEnd <= 300) e.preventDefault();
-    lastTouchEnd = now;
-  }, false);
-
-  document.addEventListener('touchmove', (e) => {
-    const stage = document.querySelector('.stage:not(.hidden)');
-    if (stage && stage.id !== 'stage-idle') e.preventDefault();
-  }, { passive: false });
-
-  document.addEventListener('selectstart', (e) => {
-    const stage = document.querySelector('.stage:not(.hidden)');
-    if (stage && stage.id !== 'stage-idle') e.preventDefault();
-  });
-
-  new BreathworkApp();
-});
+const app = new BreathingApp();
