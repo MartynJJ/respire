@@ -83,13 +83,80 @@ class BreathingApp {
     this.meditationStartTime = null;
     this.meditationDuration = 10;
     this.meditationTimer = null;
+    this.isPaused = false;
+    this.pausedElapsed = 0;
+    this.phaseStartTime = 0;
+    this.animationFrameId = null;
 
     this.initDOM();
     this.attachListeners();
+    this.checkOnboarding();
+  }
+
+  checkOnboarding() {
+    if (!localStorage.getItem('respire_onboarding_done')) {
+      this.showOnboarding();
+    }
+  }
+
+  showOnboarding() {
+    this.state = 'ONBOARDING';
+    this.dom.stageIdle.classList.add('hidden');
+    this.dom.stageOnboarding.classList.remove('hidden');
+    this.currentSlide = 0;
+    this.renderOnboardingSlide();
+  }
+
+  renderOnboardingSlide() {
+    const slides = this.dom.stageOnboarding.querySelectorAll('.onboarding-slide');
+    slides.forEach((s, i) => {
+      if (i === this.currentSlide) {
+        s.style.display = 'flex';
+      } else {
+        s.style.display = 'none';
+      }
+    });
+
+    const prevBtn = this.dom.stageOnboarding.querySelector('.onboarding-prev-btn');
+    const nextBtn = this.dom.stageOnboarding.querySelector('.onboarding-next-btn');
+    const skipBtn = this.dom.stageOnboarding.querySelector('.onboarding-skip-btn');
+
+    if (prevBtn) prevBtn.style.display = this.currentSlide > 0 ? 'block' : 'none';
+    if (nextBtn) nextBtn.textContent = this.currentSlide === 2 ? 'Get Started' : 'Next';
+  }
+
+  nextOnboardingSlide() {
+    if (this.currentSlide < 2) {
+      this.currentSlide++;
+      this.renderOnboardingSlide();
+    } else {
+      this.finishOnboarding();
+    }
+  }
+
+  prevOnboardingSlide() {
+    if (this.currentSlide > 0) {
+      this.currentSlide--;
+      this.renderOnboardingSlide();
+    }
+  }
+
+  finishOnboarding() {
+    localStorage.setItem('respire_onboarding_done', 'true');
+    this.state = 'IDLE';
+    this.dom.stageOnboarding.classList.add('hidden');
+    this.dom.stageIdle.classList.remove('hidden');
+  }
+
+  createOnboardingStage() {
+    const existing = document.querySelector('[data-stage="onboarding"]');
+    if (existing) return existing;
+    return document.createElement('div');
   }
 
   initDOM() {
     this.dom = {
+      stageOnboarding: document.querySelector('[data-stage="onboarding"]') || this.createOnboardingStage(),
       stageIdle: document.getElementById('stage-idle'),
       stageBreathe: document.getElementById('stage-breathing'),
       stageHold: document.getElementById('stage-hold'),
@@ -148,6 +215,15 @@ class BreathingApp {
   }
 
   attachListeners() {
+    // Onboarding
+    const onboardingNextBtn = document.querySelector('.onboarding-next-btn');
+    const onboardingPrevBtn = document.querySelector('.onboarding-prev-btn');
+    const onboardingSkipBtn = document.querySelector('.onboarding-skip-btn');
+
+    if (onboardingNextBtn) onboardingNextBtn.addEventListener('click', () => this.nextOnboardingSlide());
+    if (onboardingPrevBtn) onboardingPrevBtn.addEventListener('click', () => this.prevOnboardingSlide());
+    if (onboardingSkipBtn) onboardingSkipBtn.addEventListener('click', () => this.finishOnboarding());
+
     this.dom.btnPrimary.forEach(btn => {
       btn.addEventListener('click', () => {
         if (this.state === 'IDLE') this.startBreathwork();
@@ -166,7 +242,7 @@ class BreathingApp {
 
     this.dom.btnClearLogs.addEventListener('click', () => this.clearLogs());
 
-    this.dom.btnPauseBreathing.addEventListener('click', () => this.pauseBreathing());
+    this.dom.btnPauseBreathing.addEventListener('click', () => this.togglePauseBreathing());
     this.dom.btnDone.addEventListener('click', () => this.finishHold());
 
     this.dom.btnStartMeditation.addEventListener('click', () => this.startMeditation());
@@ -258,13 +334,20 @@ class BreathingApp {
     this.dom.breathingLabel.textContent = config.label;
     audio.play(528, 80, 'sine', 0.1);
 
-    const startTime = Date.now();
+    this.isPaused = false;
+    this.pausedElapsed = 0;
+    this.phaseStartTime = Date.now();
     const duration = config.duration;
 
     const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const remaining = Math.max(0, duration - elapsed);
-      const progress = Math.min(1, elapsed / duration);
+      if (this.isPaused) {
+        this.animationFrameId = requestAnimationFrame(animate);
+        return;
+      }
+
+      const totalElapsed = Date.now() - this.phaseStartTime - this.pausedElapsed;
+      const remaining = Math.max(0, duration - totalElapsed);
+      const progress = Math.min(1, totalElapsed / duration);
 
       let scale;
       if (phase === 'inhale') {
@@ -276,10 +359,10 @@ class BreathingApp {
       }
 
       this.dom.circle.style.transform = `scale(${scale})`;
-      this.dom.breathCounter.textContent = (remaining / 1000).toFixed(1) + 's';
+      this.dom.breathCounter.textContent = `${this.currentCycle}/${CONFIG.breathCount} • ${(remaining / 1000).toFixed(1)}s`;
 
-      if (elapsed < duration) {
-        requestAnimationFrame(animate);
+      if (totalElapsed < duration) {
+        this.animationFrameId = requestAnimationFrame(animate);
       } else {
         this.nextPhase(phase);
       }
@@ -337,8 +420,14 @@ class BreathingApp {
     this.startRecovery();
   }
 
-  pauseBreathing() {
-    this.dom.btnPauseBreathing.textContent = 'Pause';
+  togglePauseBreathing() {
+    this.isPaused = !this.isPaused;
+    this.dom.btnPauseBreathing.textContent = this.isPaused ? 'Resume' : 'Pause';
+    if (this.isPaused) {
+      this.pausedAtTime = Date.now();
+    } else {
+      this.pausedElapsed += Date.now() - this.pausedAtTime;
+    }
   }
 
   startRecovery() {

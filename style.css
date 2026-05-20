@@ -362,6 +362,13 @@ main {
   color: var(--ink);
 }
 
+.btn-text {
+  background: transparent;
+  color: var(--coral);
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
 .btn-secondary:active {
   background: var(--gray-200);
 }

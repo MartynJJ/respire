@@ -22,6 +22,38 @@
     </header>
 
     <main id="stage-panel" class="stage-panel">
+      <!-- ONBOARDING -->
+      <div data-stage="onboarding" class="stage idle" style="display: flex;">
+        <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+          <div class="onboarding-slide" style="display: flex;">
+            <div style="text-align: center;">
+              <div style="font-size: 60px; margin-bottom: 32px;">🌬️</div>
+              <h2 style="font-size: 24px; margin-bottom: 12px;">Welcome to Respire</h2>
+              <p style="font-size: 14px; color: var(--ink-light); margin-bottom: 32px;">Master your breath, calm your mind, and unlock resilience.</p>
+            </div>
+          </div>
+          <div class="onboarding-slide" style="display: none;">
+            <div style="text-align: center;">
+              <div style="font-size: 60px; margin-bottom: 32px;">⚠️</div>
+              <h2 style="font-size: 24px; margin-bottom: 12px;">A Quick Note</h2>
+              <p style="font-size: 14px; color: var(--ink-light); margin-bottom: 32px;">Breathwork can be intense. If you feel dizzy or unwell, pause immediately. Never practice while driving.</p>
+            </div>
+          </div>
+          <div class="onboarding-slide" style="display: none;">
+            <div style="text-align: center;">
+              <div style="font-size: 60px; margin-bottom: 32px;">⚡</div>
+              <h2 style="font-size: 24px; margin-bottom: 12px;">Find Your Pace</h2>
+              <p style="font-size: 14px; color: var(--ink-light); margin-bottom: 32px;">Start with 3 rounds and adjust in Advanced Options. Listen to your body.</p>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; width: 100%; max-width: 400px;">
+            <button class="btn-secondary onboarding-prev-btn" style="display: none;">Back</button>
+            <button class="btn-text onboarding-skip-btn">Skip</button>
+            <button class="btn-primary onboarding-next-btn">Next</button>
+          </div>
+        </div>
+      </div>
+
       <!-- IDLE state -->
       <div id="stage-idle" class="stage idle">
         <div class="mode-tabs">
