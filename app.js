@@ -16,9 +16,9 @@ const KEYS = {
 const DEFAULT_BREATH = {
   rounds: 3,
   cycles: 30,
-  inhale: 0.5,
+  inhale: 0.7,
   holdIn: 0,
-  exhale: 0.5,
+  exhale: 0.7,
   holdOut: 0,
   recovery: 15,
 };
@@ -38,7 +38,7 @@ const DEFAULT_TWEAKS = {
 };
 
 const PRESETS = [
-  { name: 'Wim Hof',     rounds: 3, cycles: 30, inhale: 0.5, holdIn: 0, exhale: 0.5, holdOut: 0, recovery: 15 },
+  { name: 'Wim Hof',     rounds: 3, cycles: 30, inhale: 0.7, holdIn: 0, exhale: 0.7, holdOut: 0, recovery: 15 },
   { name: 'Box 4-4-4-4', rounds: 3, cycles: 12, inhale: 4,   holdIn: 4, exhale: 4,   holdOut: 4, recovery: 0  },
   { name: '4-7-8',       rounds: 3, cycles: 8,  inhale: 4,   holdIn: 7, exhale: 8,   holdOut: 0, recovery: 0  },
   { name: 'Tummo',       rounds: 4, cycles: 40, inhale: 1,   holdIn: 0, exhale: 1,   holdOut: 0, recovery: 20 },
