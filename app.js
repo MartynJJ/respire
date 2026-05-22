@@ -1,5 +1,3 @@
-// Respire — vanilla port of the Claude design (warm/coral, athletic, performance-coded)
-
 'use strict';
 
 // ───────── Constants ─────────
@@ -24,9 +22,9 @@ const DEFAULT_BREATH = {
 };
 
 const DEFAULT_MED = {
-  duration: 10,    // minutes
+  duration: 10,
   bell: false,
-  interval: 60,    // seconds
+  interval: 60,
 };
 
 const DEFAULT_TWEAKS = {
@@ -171,7 +169,6 @@ const audio = {
     }
   },
 
-  // Voice guidance
   _voices: [],
   initVoices() {
     const ss = window.speechSynthesis;
@@ -396,7 +393,6 @@ function onboardingArt(kind) {
     `;
     return sv;
   }
-  // pace
   const sv = h('span');
   const rows = ['INHALE', 'HOLD', 'EXHALE', 'RECOVERY'];
   const widths = [60, 30, 90, 140];
@@ -1453,7 +1449,7 @@ function startMed() {
 
 const shell = document.getElementById('app-shell');
 
-// Persistent overlay elements — never removed, toggled via data-attrs so CSS transitions fire
+// Sheet and toast are persistent siblings of the scene so CSS transitions fire correctly.
 let _currentScene = null;
 const _sheetBackdropEl = h('div', { className: 'sheet-backdrop', dataset: { open: 'false' },
   onclick: () => { state.advancedOpen = false; updateSheet(); } });
@@ -1503,7 +1499,6 @@ function boot() {
   const done = localStorage.getItem(KEYS.onboarding) === 'true';
   state.screen = done ? 'main' : 'onboarding';
 
-  // Dev hook (localhost / file://) for screenshot harness
   const host = location.hostname;
   if (!host || host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') {
     window.respire = { state, render, startBreath, startMed };
