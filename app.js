@@ -1,654 +1,1439 @@
-const DEFAULT_CONFIG = {
-  breathCount: 30,
-  breathInMs: 500,
-  breathHoldMs: 0,
-  breathOutMs: 500,
-  breathPauseMs: 0,
-  recoveryHoldMs: 15000,
-  defaultRounds: 3,
-  meditationDurationMs: 600000,
-  meditationIntervalMs: 60000,
-  meditationIntervalEnabled: true,
+// Respire — vanilla port of the Claude design (warm/coral, athletic, performance-coded)
+
+'use strict';
+
+// ───────── Constants ─────────
+
+const KEYS = {
+  breath: 'respire_breath',
+  med: 'respire_med',
+  tweaks: 'respire_tweaks',
+  history: 'respire_history',
+  legacyHistory: 'respire_sessions',
+  onboarding: 'respire_onboarding_done',
 };
 
-let CONFIG = { ...DEFAULT_CONFIG };
+const DEFAULT_BREATH = {
+  rounds: 3,
+  cycles: 30,
+  inhale: 1.5,
+  holdIn: 0,
+  exhale: 1.5,
+  holdOut: 0,
+  recovery: 15,
+};
 
-function loadConfig() {
-  try {
-    const saved = localStorage.getItem('respire_config');
-    if (saved) CONFIG = { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
-  } catch (e) {
-    CONFIG = { ...DEFAULT_CONFIG };
+const DEFAULT_MED = {
+  duration: 10,    // minutes
+  bell: false,
+  interval: 60,    // seconds
+};
+
+const DEFAULT_TWEAKS = {
+  dark: false,
+  sound: true,
+  haptics: true,
+};
+
+const PRESETS = [
+  { name: 'Wim Hof',     rounds: 3, cycles: 30, inhale: 1.5, holdIn: 0, exhale: 1.5, holdOut: 0, recovery: 15 },
+  { name: 'Box 4-4-4-4', rounds: 3, cycles: 12, inhale: 4,   holdIn: 4, exhale: 4,   holdOut: 4, recovery: 0  },
+  { name: '4-7-8',       rounds: 3, cycles: 8,  inhale: 4,   holdIn: 7, exhale: 8,   holdOut: 0, recovery: 0  },
+  { name: 'Tummo',       rounds: 4, cycles: 40, inhale: 1,   holdIn: 0, exhale: 1,   holdOut: 0, recovery: 20 },
+];
+
+const ONBOARDING = [
+  { eyebrow: 'Welcome to Respire', title: 'Breath as discipline.',
+    body: 'A performance breathing app for power, focus, and stillness. Built around the cycle: ventilate, hold, recover.',
+    art: 'intro' },
+  { eyebrow: 'Practice safely', title: 'Sit. Lie down. Never in water.',
+    body: 'Breathwork can cause lightheadedness. Stay seated or lying down. Never practice while driving, swimming, or in a bath.',
+    art: 'safety' },
+  { eyebrow: 'Your pace', title: 'Tune every dimension.',
+    body: 'Cycles per round. Inhale, hold, exhale, hold timings. Recovery length. Start with a preset — make it yours.',
+    art: 'pace' },
+];
+
+// ───────── DOM helpers ─────────
+
+function h(tag, props, ...kids) {
+  const el = document.createElement(tag);
+  if (props) {
+    for (const k in props) {
+      const v = props[k];
+      if (v == null || v === false) continue;
+      if (k === 'className') el.className = v;
+      else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+      else if (k === 'dataset' && typeof v === 'object') Object.assign(el.dataset, v);
+      else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
+      else if (v === true) el.setAttribute(k, '');
+      else el.setAttribute(k, v);
+    }
   }
-}
-
-function saveConfig() {
-  localStorage.setItem('respire_config', JSON.stringify(CONFIG));
-}
-
-loadConfig();
-
-if (localStorage.getItem('respire_dark') === 'true') {
-  document.documentElement.setAttribute('data-theme', 'dark');
-}
-
-class AudioManager {
-  constructor() {
-    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    this.isMuted = localStorage.getItem('respire_muted') === 'true';
+  for (const c of kids.flat()) {
+    if (c == null || c === false) continue;
+    el.append(typeof c === 'object' ? c : document.createTextNode(String(c)));
   }
+  return el;
+}
 
+function clearKids(el) {
+  while (el.firstChild) el.removeChild(el.firstChild);
+}
+
+function icon(name, size = 22) {
+  const span = document.createElement('span');
+  span.style.display = 'inline-flex';
+  span.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name] || ''}</svg>`;
+  return span;
+}
+
+const ICON_PATHS = {
+  breath:   '<circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="8" stroke-opacity=".55"/><circle cx="12" cy="12" r="11.2" stroke-opacity=".25"/>',
+  meditate: '<path d="M12 3v3"/><path d="M12 21c4 0 7-3 7-7 0-2.5-2-4-4-4-1.5 0-3 1-3 3 0-2-1.5-3-3-3-2 0-4 1.5-4 4 0 4 3 7 7 7Z"/><path d="M8 13l-3-2"/><path d="M16 13l3-2"/>',
+  history:  '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 8v4l3 2"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 0 0-2-1.2l-.4-2.4h-4l-.4 2.4a7 7 0 0 0-2 1.2L5.5 5.9l-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-.9a7 7 0 0 0 2 1.2l.4 2.4h4l.4-2.4a7 7 0 0 0 2-1.2l2.3.9 2-3.4-2-1.5c.1-.4.1-.8.1-1.2Z"/>',
+  bell:     '<path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z"/><path d="M10 19a2 2 0 0 0 4 0"/>',
+  moon:     '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/>',
+  sun:      '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  close:    '<path d="M6 6l12 12M18 6L6 18"/>',
+  chevR:    '<path d="M9 6l6 6-6 6"/>',
+  chevL:    '<path d="M15 6l-6 6 6 6"/>',
+  pause:    '<rect x="7" y="5" width="3.5" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="13.5" y="5" width="3.5" height="14" rx="1" fill="currentColor" stroke="none"/>',
+  play:     '<path d="M7 4L19 12 7 20Z" fill="currentColor" stroke="none"/>',
+  check:    '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  trash:    '<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/>',
+  hapt:     '<rect x="7" y="3" width="10" height="18" rx="2"/><path d="M12 18h.01"/><path d="M3 8c1 1 1 7 0 8"/><path d="M21 8c-1 1-1 7 0 8"/>',
+};
+
+// ───────── Math / format ─────────
+
+const easeInOutSine = (t) => -(Math.cos(Math.PI * Math.max(0, Math.min(1, t))) - 1) / 2;
+
+function fmtTime(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function todayLabel() {
+  const d = new Date();
+  const opts = { weekday: 'long', month: 'short', day: 'numeric' };
+  return d.toLocaleDateString(undefined, opts);
+}
+
+// ───────── Audio + haptics ─────────
+
+const audio = {
+  ctx: null,
+  ensure() {
+    if (this.ctx) return this.ctx;
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (Ctx) this.ctx = new Ctx();
+    return this.ctx;
+  },
   resume() {
-    if (this.ctx.state === 'suspended') this.ctx.resume();
-  }
+    const c = this.ensure();
+    if (c && c.state === 'suspended') c.resume();
+  },
+  tone(freq, dur, type = 'sine', gain = 0.06) {
+    if (!state.tweaks.sound) return;
+    const c = this.ensure();
+    if (!c) return;
+    if (c.state === 'suspended') c.resume();
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    g.gain.value = 0;
+    g.gain.linearRampToValueAtTime(gain, c.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
+    o.connect(g).connect(c.destination);
+    o.start();
+    o.stop(c.currentTime + dur);
+  },
+  chime() {
+    this.tone(660, 0.55, 'sine', 0.08);
+    setTimeout(() => this.tone(990, 0.45, 'sine', 0.05), 60);
+  },
+  phaseTone(phase) {
+    switch (phase) {
+      case 'inhale':  this.tone(220, 0.18, 'sine', 0.05); break;
+      case 'exhale':  this.tone(330, 0.18, 'sine', 0.05); break;
+      case 'holdIn':
+      case 'holdOut': this.tone(110, 0.24, 'sine', 0.06); break;
+      case 'recovery':this.tone(440, 0.35, 'sine', 0.06); break;
+      case 'countdown':this.tone(880, 0.09, 'square', 0.04); break;
+    }
+  },
+};
 
-  play(freq, ms, type = 'sine', vol = 0.3) {
-    if (this.isMuted) return;
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
+function haptic(pattern) {
+  if (!state.tweaks.haptics) return;
+  try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {}
+}
 
-    osc.type = type;
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(vol, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + ms / 1000);
+// ───────── Persistence ─────────
 
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start(now);
-    osc.stop(now + ms / 1000);
-  }
-
-  bell() {
-    this.play(528, 600, 'sine', 0.25);
+function loadJSON(key, fallback) {
+  try {
+    const s = localStorage.getItem(key);
+    return s ? { ...fallback, ...JSON.parse(s) } : { ...fallback };
+  } catch (e) {
+    return { ...fallback };
   }
 }
 
-const audio = new AudioManager();
-
-function easeInOutSine(t) {
-  return -(Math.cos(Math.PI * t) - 1) / 2;
+function saveJSON(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
 }
 
-class BreathingApp {
-  constructor() {
-    this.state = 'IDLE';
-    this.currentRound = 0;
-    this.totalRounds = 3;
-    this.currentCycle = 0;
-    this.holdStartTime = null;
-    this.roundHoldTimes = [];
-    this.sessionStartTime = null;
-    this.timerId = null;
-    this.meditationStartTime = null;
-    this.meditationDuration = 10;
-    this.meditationTimer = null;
-    this.isPaused = false;
-    this.pausedElapsed = 0;
-    this.phaseStartTime = 0;
-    this.animationFrameId = null;
-
-    this.initDOM();
-    this.attachListeners();
-    this.checkOnboarding();
-  }
-
-  checkOnboarding() {
-    if (!localStorage.getItem('respire_onboarding_done')) {
-      this.showOnboarding();
+function loadHistory() {
+  try {
+    const cur = localStorage.getItem(KEYS.history);
+    if (cur) return JSON.parse(cur);
+  } catch (e) {}
+  // Migrate from legacy respire_sessions
+  try {
+    const legacy = localStorage.getItem(KEYS.legacyHistory);
+    if (legacy) {
+      const arr = JSON.parse(legacy);
+      const migrated = Array.isArray(arr)
+        ? arr.map(s => ({ kind: 'breath', date: s.date || new Date().toISOString(), rounds: s.rounds || 0, best: s.best || 0, total: s.total || 0 }))
+        : [];
+      saveJSON(KEYS.history, migrated);
+      return migrated;
     }
+  } catch (e) {}
+  return [];
+}
+
+function saveHistory(h) { saveJSON(KEYS.history, h); }
+function saveBreath()  { saveJSON(KEYS.breath, state.breath); }
+function saveMed()     { saveJSON(KEYS.med, state.med); }
+function saveTweaks()  { saveJSON(KEYS.tweaks, state.tweaks); }
+
+// ───────── App state ─────────
+
+const state = {
+  screen: 'onboarding',
+  tab: 'home',
+  mode: 'breath',
+  breath: { ...DEFAULT_BREATH },
+  med: { ...DEFAULT_MED },
+  tweaks: { ...DEFAULT_TWEAKS },
+  history: [],
+  advancedOpen: false,
+  result: null,
+  _toastTimer: null,
+  _toastText: '',
+  _session: null,
+};
+
+function applyTheme() {
+  document.documentElement.setAttribute('data-theme', state.tweaks.dark ? 'dark' : 'light');
+}
+
+function showToast(text) {
+  state._toastText = text;
+  if (state._toastTimer) clearTimeout(state._toastTimer);
+  state._toastTimer = setTimeout(() => { state._toastText = ''; updateToast(); }, 2200);
+  updateToast();
+}
+
+// ───────── Components ─────────
+
+function brandMark() {
+  const span = h('span', { className: 'brand' });
+  span.innerHTML = `
+    <svg width="26" height="26" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <circle cx="16" cy="16" r="14" stroke="var(--coral)" stroke-width="1.2" opacity="0.45"/>
+      <circle cx="16" cy="16" r="9" stroke="var(--coral)" stroke-width="1.5" opacity="0.75"/>
+      <circle cx="16" cy="16" r="4.5" fill="var(--coral)"/>
+    </svg>
+    Respire
+  `;
+  return span;
+}
+
+function segmented(value, options, onChange) {
+  return h('div', { className: 'segmented' },
+    options.map(o =>
+      h('button', {
+        'aria-selected': value === o.value ? 'true' : 'false',
+        onclick: () => onChange(o.value),
+      }, o.label)
+    )
+  );
+}
+
+function stepper(value, min, max, onChange, suffix) {
+  return h('div', { className: 'stepper' },
+    h('button', {
+      onclick: () => onChange(Math.max(min, value - 1)),
+      disabled: value <= min,
+    }, '−'),
+    h('div', { className: 'val' },
+      String(value),
+      suffix ? h('span', { style: { fontSize: '12px', marginLeft: '4px', color: 'var(--ink-mute)' } }, suffix) : null
+    ),
+    h('button', {
+      onclick: () => onChange(Math.min(max, value + 1)),
+      disabled: value >= max,
+    }, '+')
+  );
+}
+
+function switchEl(value, onChange) {
+  return h('div', {
+    className: 'switch',
+    dataset: { on: value ? 'true' : 'false' },
+    role: 'switch',
+    'aria-checked': value ? 'true' : 'false',
+    onclick: () => onChange(!value),
+  });
+}
+
+function slider(label, value, min, max, step, unit, onChange) {
+  return h('div', { className: 'col', style: { gap: '8px', padding: '12px 0' } },
+    h('div', { className: 'row', style: { justifyContent: 'space-between' } },
+      h('span', { style: { fontSize: '14px', fontWeight: '500' } }, label),
+      h('span', { className: 'numeric', style: { fontSize: '14px', fontWeight: '600' } }, `${value}${unit}`)
+    ),
+    h('input', {
+      className: 'range', type: 'range', min, max, step, value,
+      oninput: (e) => onChange(parseFloat(e.target.value)),
+    }),
+    h('div', { className: 'row', style: { justifyContent: 'space-between' } },
+      h('span', { className: 'caption' }, `${min}${unit}`),
+      h('span', { className: 'caption' }, `${max}${unit}`)
+    ),
+  );
+}
+
+function tabBar() {
+  const btn = (key, lbl, iconName) =>
+    h('button', {
+      'aria-selected': state.tab === key ? 'true' : 'false',
+      onclick: () => { state.tab = key; render(); },
+    }, icon(iconName, 22), lbl);
+
+  return h('div', { className: 'tabbar' },
+    btn('home', 'Home', 'breath'),
+    btn('history', 'History', 'history'),
+    btn('settings', 'Settings', 'settings'),
+  );
+}
+
+function header(right) {
+  return h('div', { className: 'header' }, brandMark(), right || h('span'));
+}
+
+// ───────── Onboarding art ─────────
+
+function onboardingArt(kind) {
+  if (kind === 'intro') {
+    const wrap = h('div', { className: 'orb-wrap', style: { width: 'min(220px, 32vh)', height: 'min(220px, 32vh)' } });
+    wrap.innerHTML = `
+      <div class="orb-ring r1" style="transform: scale(1)"></div>
+      <div class="orb-ring r2" style="transform: scale(1)"></div>
+      <div class="orb-ring r3" style="transform: scale(1)"></div>
+    `;
+    return wrap;
+  }
+  if (kind === 'safety') {
+    const sv = h('span');
+    sv.innerHTML = `
+      <svg viewBox="0 0 220 220" style="width: min(180px, 28vh); height: min(180px, 28vh);">
+        <defs>
+          <linearGradient id="og1" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="var(--coral)" stop-opacity="0.9"/>
+            <stop offset="1" stop-color="var(--coral-deep)" stop-opacity="0.9"/>
+          </linearGradient>
+        </defs>
+        <path d="M110 18 L188 50 L182 124 C176 162 148 192 110 204 C72 192 44 162 38 124 L32 50 Z" fill="url(#og1)"/>
+        <path d="M82 110 l22 22 l38 -46" stroke="var(--bg)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+    `;
+    return sv;
+  }
+  // pace
+  const sv = h('span');
+  const rows = ['INHALE', 'HOLD', 'EXHALE', 'RECOVERY'];
+  const widths = [60, 30, 90, 140];
+  sv.innerHTML = `
+    <svg viewBox="0 0 240 200" style="width: min(260px, 36vh); height: auto;">
+      <g>
+        ${rows.map((label, i) => `
+          <g transform="translate(20, ${30 + i * 44})">
+            <text x="0" y="-8" fill="var(--ink-mute)" font-size="10" font-weight="600" letter-spacing="2" style="text-transform: uppercase; font-family: var(--ff-sans);">${label}</text>
+            <rect x="0" y="0" width="200" height="3" rx="1.5" fill="var(--line-strong)"/>
+            <rect x="0" y="0" width="${widths[i]}" height="3" rx="1.5" fill="var(--coral)"/>
+            <circle cx="${widths[i]}" cy="1.5" r="7" fill="var(--ink)" stroke="var(--bg)" stroke-width="3"/>
+          </g>`).join('')}
+      </g>
+    </svg>
+  `;
+  return sv;
+}
+
+// ───────── Scenes ─────────
+
+function sceneOnboarding() {
+  let i = 0;
+
+  const root = h('div', { className: 'scene', dataset: { active: 'true' } });
+  const body = h('div');
+  root.append(body);
+
+  const draw = () => {
+    clearKids(body);
+    const card = ONBOARDING[i];
+    const last = i === ONBOARDING.length - 1;
+
+    body.append(
+      header(h('button', {
+        className: 'btn btn-text',
+        onclick: () => finishOnboarding(),
+      }, 'Skip')),
+      h('div', { className: 'scroll', style: { padding: '0 28px 16px', display: 'flex', flexDirection: 'column' } },
+        h('div', { style: { flex: '0 0 auto', padding: '8px 0', display: 'grid', placeItems: 'center' } },
+          onboardingArt(card.art)
+        ),
+        h('div', { className: 'dots' },
+          ONBOARDING.map((_, idx) =>
+            h('span', { dataset: { active: idx === i ? 'true' : 'false' } })
+          )
+        ),
+        h('div', { className: 'col', style: { alignItems: 'flex-start', gap: '14px', padding: '8px 0 0' } },
+          h('div', { className: 'eyebrow' }, card.eyebrow),
+          h('h1', { className: 'title-xl' }, card.title),
+          h('p', { className: 'body' }, card.body),
+        )
+      ),
+      h('div', { style: { padding: '12px 24px calc(20px + var(--safe-bot))', display: 'flex', gap: '10px', flexShrink: '0' } },
+        i > 0
+          ? h('button', {
+              className: 'btn btn-ghost', 'aria-label': 'Back',
+              style: { width: '56px', padding: '0' },
+              onclick: () => { i--; draw(); },
+            }, icon('chevL', 18))
+          : null,
+        h('button', {
+          className: 'btn btn-primary', style: { flex: '1' },
+          onclick: () => {
+            if (last) finishOnboarding();
+            else { i++; draw(); }
+          },
+        }, last ? 'Begin' : 'Continue', icon('chevR', 16))
+      )
+    );
+  };
+
+  draw();
+  return root;
+}
+
+function finishOnboarding() {
+  try { localStorage.setItem(KEYS.onboarding, 'true'); } catch (e) {}
+  state.screen = 'main';
+  render();
+}
+
+// ───────── Main scene ─────────
+
+function sceneMain() {
+  const root = h('div', { className: 'scene', dataset: { active: 'true' } });
+
+  // Header
+  root.append(
+    header(
+      h('button', {
+        className: 'btn btn-icon', 'aria-label': 'Toggle theme',
+        onclick: () => {
+          state.tweaks.dark = !state.tweaks.dark;
+          saveTweaks();
+          applyTheme();
+          render();
+        },
+      }, icon(state.tweaks.dark ? 'sun' : 'moon', 18))
+    )
+  );
+
+  // Body — depends on tab
+  if (state.tab === 'home') {
+    if (state.mode === 'breath') root.append(breathHomeView());
+    else root.append(medHomeView());
+  } else if (state.tab === 'history') {
+    root.append(historyView());
+  } else if (state.tab === 'settings') {
+    root.append(settingsView());
   }
 
-  showOnboarding() {
-    this.state = 'ONBOARDING';
-    this.dom.stageIdle.classList.add('hidden');
-    this.dom.stageOnboarding.classList.remove('hidden');
-    this.currentSlide = 0;
-    this.renderOnboardingSlide();
+  // Tab bar
+  root.append(tabBar());
+
+  return root;
+}
+
+// ───────── Breath Home ─────────
+
+function breathHomeView() {
+  const s = state.breath;
+  const cycleS = s.inhale + s.holdIn + s.exhale + s.holdOut;
+  const totalSec = Math.round((cycleS * s.cycles + s.recovery + 30) * s.rounds);
+  const pattern = `${s.inhale}·${s.holdIn}·${s.exhale}·${s.holdOut}`;
+
+  return h('div', { className: 'scroll', style: { padding: '8px 24px 24px' } },
+    segmented(state.mode, [
+      { value: 'breath', label: 'Breathwork' },
+      { value: 'meditate', label: 'Meditate' },
+    ], (v) => { state.mode = v; render(); }),
+
+    h('div', { style: { height: '28px' } }),
+
+    h('div', { className: 'eyebrow' }, todayLabel()),
+    h('h1', { className: 'title-xl', style: { margin: '6px 0 0' } },
+      'Ready to ',
+      h('span', { style: { color: 'var(--coral)' } }, 'ventilate'),
+      '.'
+    ),
+    h('p', { className: 'body', style: { margin: '10px 0 0', maxWidth: '360px' } },
+      `${s.rounds} rounds · ${s.cycles} cycles each · ~${fmtTime(totalSec)} total`
+    ),
+
+    // Rounds card
+    h('div', { className: 'card', style: { marginTop: '22px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' } },
+      h('div', { className: 'row', style: { justifyContent: 'space-between' } },
+        h('div', { className: 'col', style: { gap: '2px' } },
+          h('span', { className: 'eyebrow' }, 'Rounds'),
+          h('span', { style: { fontSize: '14px', color: 'var(--ink-soft)' } }, "How many sets you'll do")
+        ),
+        stepper(s.rounds, 1, 10, (v) => { state.breath.rounds = v; saveBreath(); render(); })
+      ),
+      h('div', { className: 'divider' }),
+      h('div', { className: 'row', style: { justifyContent: 'space-between' } },
+        h('div', { className: 'col', style: { gap: '2px' } },
+          h('span', { className: 'eyebrow' }, 'Pattern'),
+          h('span', { className: 'numeric', style: { fontSize: '14px', color: 'var(--ink-soft)' } },
+            `${pattern}s · ${s.cycles}× · ${s.recovery}s recovery`)
+        ),
+        h('button', {
+          className: 'btn btn-text', style: { color: 'var(--coral)' },
+          onclick: () => { state.advancedOpen = true; render(); },
+        }, 'Customize', icon('chevR', 14))
+      )
+    ),
+
+    // Cycle preview
+    h('div', { className: 'card', style: { marginTop: '14px', padding: '20px 18px' } },
+      h('div', { className: 'eyebrow', style: { marginBottom: '12px' } }, 'One cycle'),
+      cyclePreview(s)
+    ),
+
+    h('div', { style: { height: '24px' } }),
+
+    h('button', {
+      className: 'btn btn-coral', style: { width: '100%', height: '62px', fontSize: '18px' },
+      onclick: startBreath,
+    }, 'Start session'),
+
+    h('p', { className: 'caption', style: { textAlign: 'center', marginTop: '14px' } },
+      'Practice seated or lying down. Never in water.')
+  );
+}
+
+function cyclePreview(s) {
+  const parts = [
+    { name: 'Inhale', val: s.inhale, color: 'var(--coral)' },
+    { name: 'Hold',   val: s.holdIn, color: 'var(--ember)' },
+    { name: 'Exhale', val: s.exhale, color: 'var(--moss)' },
+    { name: 'Hold',   val: s.holdOut, color: 'var(--ink-mute)' },
+  ];
+  const sum = parts.reduce((a, p) => a + p.val, 0) || 1;
+  const visible = parts.filter(p => p.val > 0);
+
+  return h('div', null,
+    h('div', { style: { display: 'flex', height: '12px', borderRadius: '6px', overflow: 'hidden', background: 'var(--surface-2)', border: '1px solid var(--line)' } },
+      visible.map((p, i) =>
+        h('div', { style: { flex: String(p.val / sum), background: p.color, borderRight: i < visible.length - 1 ? '2px solid var(--bg)' : 'none' } })
+      )
+    ),
+    h('div', { style: { display: 'flex', marginTop: '12px', gap: '8px' } },
+      parts.map((p) =>
+        h('div', { className: 'col', style: { flex: '1', gap: '2px' } },
+          h('div', { className: 'row', style: { gap: '6px', alignItems: 'center' } },
+            h('span', { style: { width: '6px', height: '6px', borderRadius: '3px', background: p.color } }),
+            h('span', { className: 'caption', style: { color: 'var(--ink-soft)' } }, p.name),
+          ),
+          h('span', { className: 'numeric', style: { fontSize: '15px', fontWeight: '500', color: 'var(--ink)' } }, `${p.val}s`)
+        )
+      )
+    )
+  );
+}
+
+// ───────── Meditation Home ─────────
+
+function medHomeView() {
+  const m = state.med;
+  const presets = [5, 10, 15, 20, 30];
+
+  return h('div', { className: 'scroll', style: { padding: '8px 24px 24px' } },
+    segmented(state.mode, [
+      { value: 'breath', label: 'Breathwork' },
+      { value: 'meditate', label: 'Meditate' },
+    ], (v) => { state.mode = v; render(); }),
+
+    h('div', { style: { height: '28px' } }),
+
+    h('div', { className: 'eyebrow' }, 'Meditation Timer'),
+    h('h1', { className: 'title-xl', style: { margin: '6px 0 0' } },
+      'Sit quietly.', h('br'),
+      h('span', { style: { color: 'var(--coral)' } },
+        `Stay ${m.duration} ${m.duration === 1 ? 'minute' : 'minutes'}.`)
+    ),
+    h('p', { className: 'body', style: { margin: '10px 0 0', maxWidth: '360px' } },
+      'Choose a duration and a bell interval. The timer rings when complete.'),
+
+    h('div', { className: 'card', style: { marginTop: '22px', padding: '18px' } },
+      h('div', { className: 'eyebrow', style: { marginBottom: '12px' } }, 'Duration'),
+      h('div', { className: 'pill-options' },
+        presets.map(p =>
+          h('button', {
+            'aria-selected': m.duration === p ? 'true' : 'false',
+            onclick: () => { state.med.duration = p; saveMed(); render(); },
+          }, `${p}m`)
+        )
+      ),
+      h('div', { className: 'divider', style: { margin: '18px 0' } }),
+      h('div', { className: 'col', style: { gap: '8px' } },
+        h('div', { className: 'row', style: { justifyContent: 'space-between' } },
+          h('span', { style: { fontSize: '14px', fontWeight: '500' } }, 'Custom duration'),
+          h('span', { className: 'numeric', style: { fontSize: '14px', fontWeight: '600' } }, `${m.duration}m`),
+        ),
+        h('input', {
+          className: 'range', type: 'range', min: '1', max: '90', step: '1', value: m.duration,
+          oninput: (e) => { state.med.duration = parseInt(e.target.value, 10); saveMed(); render(); },
+        })
+      )
+    ),
+
+    h('div', { className: 'card', style: { marginTop: '14px', padding: '18px' } },
+      h('div', { className: 'row', style: { justifyContent: 'space-between' } },
+        h('div', { className: 'col', style: { gap: '2px' } },
+          h('span', { className: 'eyebrow' }, 'Interval bell'),
+          h('span', { style: { fontSize: '13px', color: 'var(--ink-soft)' } }, `Chime every ${m.interval}s`)
+        ),
+        switchEl(m.bell, (v) => { state.med.bell = v; saveMed(); render(); })
+      ),
+      m.bell
+        ? h('div', null,
+            h('div', { className: 'divider', style: { margin: '14px 0' } }),
+            slider('Bell every', m.interval, 15, 300, 15, 's',
+              (v) => { state.med.interval = v; saveMed(); render(); })
+          )
+        : null
+    ),
+
+    h('div', { style: { height: '24px' } }),
+
+    h('button', {
+      className: 'btn btn-coral', style: { width: '100%', height: '62px', fontSize: '18px' },
+      onclick: startMed,
+    }, 'Start session')
+  );
+}
+
+// ───────── History ─────────
+
+function historyView() {
+  const totalSessions = state.history.length;
+  const totalSeconds = state.history.reduce((a, x) => a + (x.total || x.duration || 0), 0);
+  const bestHold = state.history.reduce((a, x) => Math.max(a, x.best || 0), 0);
+
+  return h('div', { className: 'scroll', style: { padding: '8px 24px 24px' } },
+    h('div', { className: 'eyebrow' }, 'Your practice'),
+    h('h1', { className: 'title-xl', style: { margin: '6px 0 22px' } }, 'History'),
+    h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' } },
+      statCard(totalSessions, 'Sessions'),
+      statCard(fmtTime(totalSeconds), 'Total time'),
+      statCard(fmtTime(bestHold), 'Best hold'),
+    ),
+    h('div', { className: 'card', style: { marginTop: '16px', padding: '8px 18px' } },
+      state.history.length === 0
+        ? h('div', { style: { padding: '32px 0', textAlign: 'center' } },
+            h('div', { className: 'caption' }, 'No sessions yet.'),
+            h('div', { className: 'body', style: { marginTop: '6px' } },
+              'Your first breathwork or meditation will appear here.')
+          )
+        : state.history.map(item => historyRow(item))
+    ),
+    state.history.length > 0
+      ? h('button', {
+          className: 'btn btn-text', style: { width: '100%', marginTop: '14px' },
+          onclick: () => {
+            if (confirm('Clear all history?')) {
+              state.history = [];
+              saveHistory(state.history);
+              showToast('History cleared');
+            }
+          },
+        }, icon('trash', 14), 'Clear history')
+      : null
+  );
+}
+
+function historyRow(item) {
+  return h('div', { className: 'history-row' },
+    h('div', { className: 'col', style: { gap: '4px' } },
+      h('div', { className: 'row', style: { gap: '8px' } },
+        h('span', { className: 'chip ' + (item.kind === 'breath' ? 'coral' : '') },
+          icon(item.kind === 'breath' ? 'breath' : 'meditate', 12),
+          item.kind === 'breath' ? 'Breathwork' : 'Meditation'
+        ),
+        h('span', { className: 'caption' }, item.date)
+      ),
+      h('span', { className: 'body', style: { color: 'var(--ink)' } },
+        item.kind === 'breath'
+          ? `${item.rounds} rounds · best ${fmtTime(item.best)}`
+          : `${Math.round((item.duration || 0) / 60)} min sit`)
+    ),
+    h('span', { className: 'numeric', style: { fontSize: '13px', color: 'var(--ink-mute)' } },
+      fmtTime(item.kind === 'breath' ? item.total : item.duration))
+  );
+}
+
+function statCard(value, label) {
+  return h('div', { className: 'card', style: { padding: '14px 12px', textAlign: 'left' } },
+    h('div', { className: 'numeric', style: { fontSize: '22px', fontWeight: '600', letterSpacing: '-0.02em' } }, value),
+    h('div', { className: 'caption', style: { marginTop: '2px' } }, label)
+  );
+}
+
+// ───────── Settings ─────────
+
+function settingsView() {
+  const t = state.tweaks;
+
+  const row = (iconName, label, meta, value, onChange) =>
+    h('div', { className: 'settings-row' },
+      h('div', { className: 'col', style: { gap: '2px' } },
+        h('div', { className: 'row', style: { gap: '10px' } },
+          icon(iconName, 18),
+          h('span', { style: { fontSize: '15px', fontWeight: '500' } }, label),
+        ),
+        h('div', { className: 'meta' }, meta),
+      ),
+      switchEl(value, onChange)
+    );
+
+  return h('div', { className: 'scroll', style: { padding: '8px 24px 24px' } },
+    h('div', { className: 'eyebrow' }, 'Configure'),
+    h('h1', { className: 'title-xl', style: { margin: '6px 0 22px' } }, 'Settings'),
+
+    h('div', { className: 'card' },
+      h('div', { className: 'eyebrow', style: { marginBottom: '8px' } }, 'Appearance'),
+      row(t.dark ? 'moon' : 'sun', 'Dark mode', 'Switches to a warm-black theme',
+        t.dark, (v) => { state.tweaks.dark = v; saveTweaks(); applyTheme(); render(); })
+    ),
+
+    h('div', { className: 'card', style: { marginTop: '14px' } },
+      h('div', { className: 'eyebrow', style: { marginBottom: '8px' } }, 'Feedback'),
+      row('bell', 'Sound', 'Chimes on phase transitions & bell',
+        t.sound, (v) => { state.tweaks.sound = v; saveTweaks(); render(); }),
+      row('hapt', 'Haptics', 'Buzz at each inhale, exhale, and hold',
+        t.haptics, (v) => { state.tweaks.haptics = v; saveTweaks(); render(); })
+    ),
+
+    h('div', { className: 'card', style: { marginTop: '14px' } },
+      h('div', { className: 'eyebrow', style: { marginBottom: '8px' } }, 'About'),
+      h('div', { className: 'settings-row' },
+        h('div', { className: 'col', style: { gap: '2px' } },
+          h('span', { style: { fontSize: '15px', fontWeight: '500' } }, 'Reset session history'),
+          h('div', { className: 'meta' }, `${state.history.length} entries stored locally`),
+        ),
+        h('button', { className: 'btn btn-text', style: { color: 'var(--coral)' },
+          onclick: () => {
+            if (state.history.length === 0) return;
+            if (confirm('Clear all history?')) {
+              state.history = [];
+              saveHistory(state.history);
+              showToast('History cleared');
+            }
+          } }, 'Clear')
+      ),
+      h('div', { className: 'settings-row' },
+        h('div', { className: 'col', style: { gap: '2px' } },
+          h('span', { style: { fontSize: '15px', fontWeight: '500' } }, 'Restart onboarding'),
+          h('div', { className: 'meta' }, 'Show the intro again'),
+        ),
+        h('button', { className: 'btn btn-text', style: { color: 'var(--coral)' },
+          onclick: () => {
+            try { localStorage.removeItem(KEYS.onboarding); } catch (e) {}
+            state.screen = 'onboarding';
+            render();
+          } }, 'Restart')
+      )
+    ),
+
+    h('p', { className: 'caption', style: { textAlign: 'center', marginTop: '20px', padding: '0 24px' } },
+      'Consult a doctor before practicing if you have heart, lung, or pregnancy conditions.')
+  );
+}
+
+// ───────── Advanced sheet ─────────
+
+function buildSheetContents() {
+  const s = state.breath;
+  return [
+    h('div', { className: 'sheet-grabber' }),
+    h('div', { className: 'header', style: { padding: '10px 24px 8px' } },
+      h('div', { className: 'title-md' }, 'Advanced Options'),
+      h('button', { className: 'btn btn-icon',
+        onclick: () => { state.advancedOpen = false; render(); },
+      }, icon('close', 18))
+    ),
+    h('div', { className: 'scroll', style: { padding: '0 24px 24px' } },
+      h('div', { className: 'eyebrow', style: { paddingTop: '8px', paddingBottom: '4px' } }, 'Presets'),
+      h('div', { className: 'pill-options' },
+        PRESETS.map(p => {
+          const same = p.cycles === s.cycles && p.inhale === s.inhale && p.holdIn === s.holdIn
+                    && p.exhale === s.exhale && p.holdOut === s.holdOut;
+          return h('button', {
+            'aria-selected': same ? 'true' : 'false',
+            onclick: () => {
+              Object.assign(state.breath, p);
+              saveBreath();
+              render();
+            },
+          }, p.name);
+        })
+      ),
+      h('div', { className: 'divider', style: { margin: '20px 0 4px' } }),
+
+      h('div', { className: 'eyebrow', style: { paddingTop: '12px' } }, 'Round structure'),
+      slider('Breathing Cycles', s.cycles, 5, 100, 1, ' cycles',
+        (v) => { state.breath.cycles = v; saveBreath(); render(); }),
+      slider('Recovery Hold', s.recovery, 5, 60, 1, 's',
+        (v) => { state.breath.recovery = v; saveBreath(); render(); }),
+
+      h('div', { className: 'eyebrow', style: { paddingTop: '16px' } }, 'Per-cycle timings'),
+      slider('Inhale', s.inhale, 0.2, 8, 0.1, 's',
+        (v) => { state.breath.inhale = +v.toFixed(1); saveBreath(); render(); }),
+      slider('Hold after inhale', s.holdIn, 0, 10, 0.5, 's',
+        (v) => { state.breath.holdIn = +v.toFixed(1); saveBreath(); render(); }),
+      slider('Exhale', s.exhale, 0.2, 10, 0.1, 's',
+        (v) => { state.breath.exhale = +v.toFixed(1); saveBreath(); render(); }),
+      slider('Hold after exhale', s.holdOut, 0, 10, 0.5, 's',
+        (v) => { state.breath.holdOut = +v.toFixed(1); saveBreath(); render(); }),
+    ),
+    h('div', { style: { padding: '12px 24px calc(20px + var(--safe-bot))', display: 'flex', gap: '10px' } },
+      h('button', { className: 'btn btn-ghost', style: { flex: '1' },
+        onclick: () => {
+          Object.assign(state.breath, DEFAULT_BREATH);
+          saveBreath();
+          render();
+        } }, 'Reset'),
+      h('button', { className: 'btn btn-primary', style: { flex: '1.4' },
+        onclick: () => { state.advancedOpen = false; render(); } }, 'Save'),
+    ),
+  ];
+}
+
+// ───────── Breath orb (reused as DOM) ─────────
+
+function buildOrbDOM() {
+  const wrap = h('div', { className: 'orb-stack' });
+  const labelTop = h('div', { className: 'orb-label-top' }, ' ');
+  const orbWrap = h('div', { className: 'orb-wrap' });
+  orbWrap.innerHTML = `
+    <div class="orb-ring r1"></div>
+    <div class="orb-ring r2"></div>
+    <div class="orb-ring r3"></div>
+    <div class="orb-time-overlay"></div>
+  `;
+  const subBot = h('div', { className: 'orb-sub-bot' }, ' ');
+  wrap.append(labelTop, orbWrap, subBot);
+
+  return {
+    root: wrap,
+    setLabel: (txt) => { labelTop.textContent = txt || ' '; },
+    setSub: (txt) => { subBot.textContent = txt || ' '; },
+    setTime: (txt) => { orbWrap.querySelector('.orb-time-overlay').textContent = txt || ''; },
+    setScale: (s) => {
+      const v = 0.45 + Math.max(0, Math.min(1, s)) * 0.55;
+      orbWrap.querySelectorAll('.orb-ring').forEach(el => el.style.transform = `scale(${v})`);
+    },
+    setDimmed: (b) => {
+      const r3 = orbWrap.querySelector('.orb-ring.r3');
+      if (b) r3.classList.add('dimmed'); else r3.classList.remove('dimmed');
+    },
+  };
+}
+
+// ───────── Breath session ─────────
+
+class BreathSession {
+  constructor(settings) {
+    this.s = settings;
+    this.dur = {
+      countdown: 3,
+      inhale: settings.inhale,
+      holdIn: settings.holdIn,
+      exhale: settings.exhale,
+      holdOut: settings.holdOut,
+      recovery: settings.recovery || 0,
+    };
+    this.phase = 'countdown';
+    this.round = 1;
+    this.cycle = 1;
+    this.paused = false;
+    this.pauseAcc = 0;
+    this.pauseStart = null;
+    this.startTime = performance.now();
+    this.t = 0;
+    this.retentions = [];
+    this.best = 0;
+    this.total = 0;
+    this.rafId = null;
+    this.exited = false;
   }
 
-  renderOnboardingSlide() {
-    const slides = this.dom.stageOnboarding.querySelectorAll('.onboarding-slide');
-    slides.forEach((s, i) => {
-      if (i === this.currentSlide) {
-        s.style.display = 'flex';
-      } else {
-        s.style.display = 'none';
-      }
-    });
+  mount() {
+    const root = h('div', { className: 'scene', dataset: { active: 'true' } });
 
-    const prevBtn = this.dom.stageOnboarding.querySelector('.onboarding-prev-btn');
-    const nextBtn = this.dom.stageOnboarding.querySelector('.onboarding-next-btn');
-    const skipBtn = this.dom.stageOnboarding.querySelector('.onboarding-skip-btn');
+    this.counterEl = h('div', { className: 'rounder' }, '');
+    this.btnPause = h('button', {
+      className: 'btn btn-icon', 'aria-label': 'Pause',
+      onclick: () => this.togglePause(),
+    }, icon('pause', 16));
 
-    if (prevBtn) prevBtn.style.display = this.currentSlide > 0 ? 'block' : 'none';
-    if (nextBtn) nextBtn.textContent = this.currentSlide === 2 ? 'Get Started' : 'Next';
+    root.append(
+      h('div', { className: 'header' },
+        h('button', {
+          className: 'btn btn-icon', 'aria-label': 'Exit',
+          onclick: () => this.exit(),
+        }, icon('close', 18)),
+        this.counterEl,
+        this.btnPause,
+      )
+    );
+
+    this.orb = buildOrbDOM();
+    root.append(h('div', { className: 'viz' }, this.orb.root));
+
+    this.actions = h('div', { style: { padding: '16px 28px 32px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'stretch' } });
+    root.append(this.actions);
+
+    this.root = root;
+    this.renderActions();
+    this.updateCounter();
+    this.loop = this.loop.bind(this);
+    this.rafId = requestAnimationFrame(this.loop);
+    return root;
   }
 
-  nextOnboardingSlide() {
-    if (this.currentSlide < 2) {
-      this.currentSlide++;
-      this.renderOnboardingSlide();
+  unmount() {
+    this.exited = true;
+    if (this.rafId) cancelAnimationFrame(this.rafId);
+  }
+
+  loop(now) {
+    if (this.exited) return;
+    if (!this.paused) {
+      this.t = (now - this.startTime - this.pauseAcc) / 1000;
+      this.advance();
+      this.draw();
+    }
+    this.rafId = requestAnimationFrame(this.loop);
+  }
+
+  togglePause() {
+    this.paused = !this.paused;
+    if (this.paused) {
+      this.pauseStart = performance.now();
+    } else if (this.pauseStart != null) {
+      this.pauseAcc += performance.now() - this.pauseStart;
+      this.pauseStart = null;
+    }
+    clearKids(this.btnPause);
+    this.btnPause.append(icon(this.paused ? 'play' : 'pause', 16));
+    this.draw();
+  }
+
+  next(p) {
+    this.startTime = performance.now();
+    this.pauseAcc = 0;
+    this.t = 0;
+    this.phase = p;
+    this.renderActions();
+    this.updateCounter();
+    audio.phaseTone(p);
+    const PHASE_HAPTIC = {
+      inhale: 15, exhale: 15, holdIn: 8, holdOut: 8, recovery: [30, 60, 30],
+    };
+    if (PHASE_HAPTIC[p]) haptic(PHASE_HAPTIC[p]);
+  }
+
+  nextCycle() {
+    if (this.cycle >= this.s.cycles) {
+      this.next('retention');
     } else {
-      this.finishOnboarding();
+      this.cycle++;
+      this.next('inhale');
     }
   }
 
-  prevOnboardingSlide() {
-    if (this.currentSlide > 0) {
-      this.currentSlide--;
-      this.renderOnboardingSlide();
-    }
-  }
-
-  finishOnboarding() {
-    localStorage.setItem('respire_onboarding_done', 'true');
-    this.state = 'IDLE';
-    this.dom.stageOnboarding.classList.add('hidden');
-    this.dom.stageIdle.classList.remove('hidden');
-  }
-
-  createOnboardingStage() {
-    const existing = document.querySelector('[data-stage="onboarding"]');
-    if (existing) return existing;
-    return document.createElement('div');
-  }
-
-  initDOM() {
-    this.dom = {
-      stageOnboarding: document.querySelector('[data-stage="onboarding"]') || this.createOnboardingStage(),
-      stageIdle: document.getElementById('stage-idle'),
-      stageBreathe: document.getElementById('stage-breathing'),
-      stageHold: document.getElementById('stage-hold'),
-      stageRecovery: document.getElementById('stage-recovery'),
-      stageComplete: document.getElementById('stage-complete'),
-      stageMeditation: document.getElementById('stage-meditation'),
-      roundBadge: document.getElementById('round-badge'),
-      holdRoundBadge: document.getElementById('hold-round-badge'),
-      recoveryRoundBadge: document.getElementById('recovery-round-badge'),
-      circle: document.getElementById('circle'),
-      breathingLabel: document.getElementById('breathing-label'),
-      breathCounter: document.getElementById('breath-counter'),
-      holdTimer: document.getElementById('hold-timer'),
-      recoveryTimer: document.getElementById('recovery-timer'),
-      sessionSummary: document.getElementById('session-summary'),
-      btnPrimary: document.querySelectorAll('#btn-primary'),
-      btnDone: document.getElementById('btn-done'),
-      meditationTimer: document.getElementById('meditation-timer'),
-      meditationIntervalLabel: document.getElementById('meditation-interval-label'),
-      btnStopMeditation: document.getElementById('btn-stop-meditation'),
-      roundsInput: document.getElementById('rounds-input'),
-      btnAdvanced: document.getElementById('btn-advanced'),
-      btnStartMeditation: document.getElementById('btn-start-meditation'),
-      modal: document.getElementById('advanced-modal'),
-      modalBackdrop: document.getElementById('modal-backdrop'),
-      btnModalClose: document.getElementById('btn-modal-close'),
-      btnModalSave: document.getElementById('btn-modal-save'),
-      btnResetDefaults: document.getElementById('btn-reset-defaults'),
-      breathingCyclesInput: document.getElementById('breathing-cycles'),
-      inhaleDurationInput: document.getElementById('inhale-duration'),
-      holdDurationInput: document.getElementById('hold-duration'),
-      exhaleDurationInput: document.getElementById('exhale-duration'),
-      pauseDurationInput: document.getElementById('pause-duration'),
-      recoveryDurationInput: document.getElementById('recovery-duration'),
-      breathingCyclesValue: document.getElementById('breathing-cycles-value'),
-      inhaleDurationValue: document.getElementById('inhale-duration-value'),
-      holdDurationValue: document.getElementById('hold-duration-value'),
-      exhaleDurationValue: document.getElementById('exhale-duration-value'),
-      pauseDurationValue: document.getElementById('pause-duration-value'),
-      recoveryDurationValue: document.getElementById('recovery-duration-value'),
-      btnMute: document.getElementById('btn-mute'),
-      btnDarkMode: document.getElementById('btn-dark-mode'),
-      btnHaptic: document.getElementById('btn-haptic'),
-      logsTbody: document.getElementById('logs-tbody'),
-      btnClearLogs: document.getElementById('btn-clear-logs'),
-      btnPauseBreathing: document.getElementById('btn-pause-breathe'),
-      meditationIntervalToggle: document.getElementById('meditation-interval-toggle'),
-      meditationCustomMinutes: document.getElementById('meditation-custom-minutes'),
-      btnPresetBox: document.getElementById('btn-preset-box'),
-      btnPreset478: document.getElementById('btn-preset-478'),
-      tabBreatheBtn: document.querySelector('[data-mode="breathwork"]'),
-      tabMeditateBtn: document.querySelector('[data-mode="meditate"]'),
-      breathworkConfig: document.getElementById('breathwork-config'),
-      meditationConfig: document.getElementById('meditation-config'),
-    };
-  }
-
-  attachListeners() {
-    // Onboarding
-    const onboardingNextBtn = document.querySelector('.onboarding-next-btn');
-    const onboardingPrevBtn = document.querySelector('.onboarding-prev-btn');
-    const onboardingSkipBtn = document.querySelector('.onboarding-skip-btn');
-
-    if (onboardingNextBtn) onboardingNextBtn.addEventListener('click', () => this.nextOnboardingSlide());
-    if (onboardingPrevBtn) onboardingPrevBtn.addEventListener('click', () => this.prevOnboardingSlide());
-    if (onboardingSkipBtn) onboardingSkipBtn.addEventListener('click', () => this.finishOnboarding());
-
-    this.dom.btnPrimary.forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (this.state === 'IDLE') this.startBreathwork();
-      });
-    });
-
-    this.dom.btnAdvanced.addEventListener('click', () => this.openModal());
-    this.dom.btnModalClose.addEventListener('click', () => this.closeModal());
-    this.dom.modalBackdrop.addEventListener('click', () => this.closeModal());
-    this.dom.btnModalSave.addEventListener('click', () => this.saveAdvanced());
-    this.dom.btnResetDefaults.addEventListener('click', () => this.resetDefaults());
-
-    this.dom.btnMute.addEventListener('click', () => this.toggleMute());
-    this.dom.btnDarkMode.addEventListener('click', () => this.toggleDarkMode());
-    this.dom.btnHaptic.addEventListener('click', () => this.toggleHaptic());
-
-    this.dom.btnClearLogs.addEventListener('click', () => this.clearLogs());
-
-    this.dom.btnPauseBreathing.addEventListener('click', () => this.togglePauseBreathing());
-    this.dom.btnDone.addEventListener('click', () => this.finishHold());
-
-    this.dom.btnStartMeditation.addEventListener('click', () => this.startMeditation());
-    this.dom.btnStopMeditation.addEventListener('click', () => this.stopMeditation());
-
-    this.dom.tabBreatheBtn.addEventListener('click', () => this.switchToBreathe());
-    this.dom.tabMeditateBtn.addEventListener('click', () => this.switchToMeditate());
-
-    document.querySelectorAll('.preset-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
-        const mins = parseInt(e.target.dataset.minutes);
-        this.meditationDuration = mins;
-        this.dom.meditationCustomMinutes.value = mins;
-      });
-    });
-
-    this.dom.meditationCustomMinutes.addEventListener('change', (e) => {
-      this.meditationDuration = parseInt(e.target.value) || 10;
-    });
-
-    [
-      ['breathing-cycles', 'breathCount'],
-      ['inhale-duration', 'breathInMs'],
-      ['hold-duration', 'breathHoldMs'],
-      ['exhale-duration', 'breathOutMs'],
-      ['pause-duration', 'breathPauseMs'],
-      ['recovery-duration', 'recoveryHoldMs'],
-    ].forEach(([inputId, configKey]) => {
-      const el = document.getElementById(inputId);
-      el.addEventListener('input', (e) => {
-        let val = parseFloat(e.target.value);
-        if (inputId !== 'breathing-cycles') val *= 1000;
-        CONFIG[configKey] = val;
-        const valueEl = document.getElementById(inputId + '-value');
-        const displayVal = inputId === 'breathing-cycles' ? val : (val / 1000).toFixed(1);
-        valueEl.textContent = displayVal + (inputId === 'breathing-cycles' ? '' : 's');
-      });
-    });
-
-    this.dom.btnPresetBox.addEventListener('click', () => this.applyPreset('box'));
-    this.dom.btnPreset478.addEventListener('click', () => this.applyPreset('478'));
-
-    this.renderLogs();
-  }
-
-  switchToBreathe() {
-    document.querySelector('[data-mode="breathwork"]').classList.add('active');
-    document.querySelector('[data-mode="meditate"]').classList.remove('active');
-    this.dom.breathworkConfig.classList.remove('hidden');
-    this.dom.meditationConfig.classList.add('hidden');
-  }
-
-  switchToMeditate() {
-    document.querySelector('[data-mode="meditate"]').classList.add('active');
-    document.querySelector('[data-mode="breathwork"]').classList.remove('active');
-    this.dom.meditationConfig.classList.remove('hidden');
-    this.dom.breathworkConfig.classList.add('hidden');
-  }
-
-  showStage(stageEl) {
-    document.querySelectorAll('.stage').forEach(s => s.classList.add('hidden'));
-    stageEl.classList.remove('hidden');
-  }
-
-  startBreathwork() {
-    audio.resume();
-    this.state = 'BREATHING';
-    this.totalRounds = parseInt(this.dom.roundsInput.value) || 3;
-    this.currentRound = 1;
-    this.currentCycle = 0;
-    this.roundHoldTimes = [];
-    this.sessionStartTime = Date.now();
-    this.showStage(this.dom.stageBreathe);
-    this.updateRoundBadge();
-    this.breathePhase('inhale');
-  }
-
-  breathePhase(phase) {
-    const phaseConfigs = {
-      inhale: { label: 'INHALE', duration: CONFIG.breathInMs },
-      holdIn: { label: 'HOLD', duration: CONFIG.breathHoldMs },
-      exhale: { label: 'EXHALE', duration: CONFIG.breathOutMs },
-      holdOut: { label: 'HOLD', duration: CONFIG.breathPauseMs },
-    };
-
-    const config = phaseConfigs[phase];
-    this.dom.breathingLabel.textContent = config.label;
-    audio.play(528, 80, 'sine', 0.1);
-
-    this.isPaused = false;
-    this.pausedElapsed = 0;
-    this.phaseStartTime = Date.now();
-    const duration = config.duration;
-
-    const animate = () => {
-      if (this.isPaused) {
-        this.animationFrameId = requestAnimationFrame(animate);
-        return;
-      }
-
-      const totalElapsed = Date.now() - this.phaseStartTime - this.pausedElapsed;
-      const remaining = Math.max(0, duration - totalElapsed);
-      const progress = Math.min(1, totalElapsed / duration);
-
-      let scale;
-      if (phase === 'inhale') {
-        scale = 0.45 + easeInOutSine(progress) * 0.55;
-      } else if (phase === 'exhale') {
-        scale = 1.0 - easeInOutSine(progress) * 0.55;
-      } else {
-        scale = phase === 'holdIn' ? 1.0 : 0.45;
-      }
-
-      this.dom.circle.style.transform = `scale(${scale})`;
-      this.dom.breathCounter.textContent = `${this.currentCycle}/${CONFIG.breathCount} • ${(remaining / 1000).toFixed(1)}s`;
-
-      if (totalElapsed < duration) {
-        this.animationFrameId = requestAnimationFrame(animate);
-      } else {
-        this.nextPhase(phase);
-      }
-    };
-
-    animate();
-  }
-
-  nextPhase(phase) {
-    const sequence = {
-      inhale: CONFIG.breathHoldMs > 0 ? 'holdIn' : 'exhale',
-      holdIn: 'exhale',
-      exhale: CONFIG.breathPauseMs > 0 ? 'holdOut' : 'inhale',
-      holdOut: 'inhale',
-    };
-
-    const nextPhase = sequence[phase];
-
-    if (nextPhase === 'inhale') {
-      this.currentCycle++;
-      if (this.currentCycle > CONFIG.breathCount) {
-        this.finishBreathing();
-      } else {
-        this.breathePhase('inhale');
-      }
-    } else {
-      this.breathePhase(nextPhase);
-    }
-  }
-
-  finishBreathing() {
-    this.state = 'HOLD';
-    this.showStage(this.dom.stageHold);
-    this.dom.holdRoundBadge.textContent = `Round ${this.currentRound} of ${this.totalRounds}`;
-    this.dom.btnDone.classList.remove('hidden');
-    this.holdStartTime = Date.now();
-    this.updateHoldTimer();
-  }
-
-  updateHoldTimer() {
-    const timer = () => {
-      const elapsed = Date.now() - this.holdStartTime;
-      const secs = Math.floor(elapsed / 1000);
-      const ms = elapsed % 1000;
-      this.dom.holdTimer.textContent = `${secs}:${String(Math.floor(ms / 100)).padStart(1, '0')}`;
-      this.timerId = requestAnimationFrame(timer);
-    };
-    timer();
-  }
-
-  finishHold() {
-    cancelAnimationFrame(this.timerId);
-    const holdTime = Date.now() - this.holdStartTime;
-    this.roundHoldTimes.push(holdTime);
-    this.startRecovery();
-  }
-
-  togglePauseBreathing() {
-    this.isPaused = !this.isPaused;
-    this.dom.btnPauseBreathing.textContent = this.isPaused ? 'Resume' : 'Pause';
-    if (this.isPaused) {
-      this.pausedAtTime = Date.now();
-    } else {
-      this.pausedElapsed += Date.now() - this.pausedAtTime;
-    }
-  }
-
-  startRecovery() {
-    this.state = 'RECOVERY';
-    this.showStage(this.dom.stageRecovery);
-    this.dom.recoveryRoundBadge.textContent = `Round ${this.currentRound} of ${this.totalRounds}`;
-
-    const recoveryMs = CONFIG.recoveryHoldMs;
-    const startTime = Date.now();
-
-    const timer = () => {
-      const elapsed = Date.now() - startTime;
-      const remaining = Math.max(0, recoveryMs - elapsed);
-      const secs = remaining / 1000;
-      this.dom.recoveryTimer.textContent = secs.toFixed(1);
-
-      const progress = Math.min(1, elapsed / recoveryMs);
-      const scale = easeInOutSine(progress);
-      this.dom.circle.style.transform = `scale(${scale})`;
-
-      if (elapsed < recoveryMs) {
-        requestAnimationFrame(timer);
-      } else {
-        this.currentRound++;
-        if (this.currentRound <= this.totalRounds) {
-          this.currentCycle = 0;
-          this.updateRoundBadge();
-          this.showStage(this.dom.stageBreathe);
-          this.breathePhase('inhale');
+  advance() {
+    if (this.phase === 'retention' || this.phase === 'done') return;
+    const d = this.dur[this.phase];
+    if (this.t < d) return;
+    switch (this.phase) {
+      case 'countdown':
+        this.next('inhale');
+        break;
+      case 'inhale':
+        if (this.s.holdIn > 0) this.next('holdIn');
+        else this.next('exhale');
+        break;
+      case 'holdIn':
+        this.next('exhale');
+        break;
+      case 'exhale':
+        if (this.s.holdOut > 0) this.next('holdOut');
+        else this.nextCycle();
+        break;
+      case 'holdOut':
+        this.nextCycle();
+        break;
+      case 'recovery':
+        if (this.round >= this.s.rounds) {
+          audio.chime();
+          haptic([60, 100, 60]);
+          this.phase = 'done';
+          this.complete();
         } else {
-          this.finishSession();
+          audio.chime();
+          haptic([30, 60, 30]);
+          this.round++;
+          this.cycle = 1;
+          this.next('inhale');
+        }
+        break;
+    }
+  }
+
+  finishRetention() {
+    const secs = Math.floor(this.t);
+    this.retentions.push(secs);
+    this.total += secs;
+    if (secs > this.best) this.best = secs;
+    audio.tone(523, 0.35, 'sine', 0.06);
+    haptic(50);
+    if (this.dur.recovery > 0) {
+      this.next('recovery');
+    } else if (this.round >= this.s.rounds) {
+      audio.chime();
+      haptic([60, 100, 60]);
+      this.phase = 'done';
+      this.complete();
+    } else {
+      this.round++;
+      this.cycle = 1;
+      this.next('inhale');
+    }
+  }
+
+  draw() {
+    const d = this.dur[this.phase] ?? 1;
+    const p = this.phase === 'retention' ? 0 : Math.min(1, this.t / d);
+    const remaining = Math.max(0, d - this.t);
+
+    let scale = 0.5, label = '', time = '', sub = ' ', dim = false;
+
+    switch (this.phase) {
+      case 'countdown':
+        scale = 0.5; label = 'Ready'; time = String(Math.ceil(remaining));
+        sub = 'Find a comfortable seat';
+        break;
+      case 'inhale':
+        scale = easeInOutSine(p); label = 'Inhale'; time = '';
+        sub = this.paused ? 'Paused — tap play to resume' : 'Follow the orb · breathe through your mouth';
+        break;
+      case 'holdIn':
+        scale = 1; label = 'Hold'; time = String(Math.ceil(remaining)); dim = true;
+        sub = this.paused ? 'Paused — tap play to resume' : '';
+        break;
+      case 'exhale':
+        scale = 1 - easeInOutSine(p); label = 'Exhale'; time = '';
+        sub = this.paused ? 'Paused — tap play to resume' : '';
+        break;
+      case 'holdOut':
+        scale = 0; label = 'Hold'; time = String(Math.ceil(remaining)); dim = true;
+        sub = this.paused ? 'Paused — tap play to resume' : '';
+        break;
+      case 'retention':
+        scale = 0.15 + 0.05 * Math.sin(this.t * 0.6);
+        label = 'Retention'; time = fmtTime(this.t);
+        sub = 'Tap done when ready';
+        break;
+      case 'recovery':
+        scale = easeInOutSine(Math.min(1, this.t / 2));
+        label = 'Recovery'; time = String(Math.ceil(d - this.t));
+        sub = 'Inhale & hold';
+        break;
+    }
+
+    this.orb.setScale(scale);
+    this.orb.setLabel(label);
+    this.orb.setTime(time);
+    this.orb.setSub(sub);
+    this.orb.setDimmed(dim);
+  }
+
+  updateCounter() {
+    let txt = `Round ${this.round} / ${this.s.rounds}`;
+    if (this.phase === 'inhale' || this.phase === 'exhale' || this.phase === 'holdIn' || this.phase === 'holdOut') {
+      txt = `Round ${this.round} · Cycle ${this.cycle}/${this.s.cycles}`;
+    }
+    this.counterEl.textContent = txt;
+  }
+
+  renderActions() {
+    clearKids(this.actions);
+    if (this.phase === 'retention') {
+      this.actions.append(
+        h('button', {
+          className: 'btn btn-coral',
+          onclick: () => this.finishRetention(),
+        }, icon('check', 18), 'Done — I need to breathe'),
+        this.retentions.length > 0
+          ? h('div', { className: 'caption', style: { textAlign: 'center' } },
+              `Previous holds: ${this.retentions.map(fmtTime).join(' · ')}`)
+          : null,
+      );
+    } else {
+      this.actions.append(
+        h('div', { className: 'caption', style: { textAlign: 'center', letterSpacing: '0.02em' } },
+          this.paused ? 'Paused — tap play to resume'
+                      : 'Follow the orb · breathe through your mouth')
+      );
+    }
+  }
+
+  exit() {
+    this.unmount();
+    state._session = null;
+    state.screen = 'main';
+    render();
+  }
+
+  complete() {
+    this.unmount();
+    state._session = null;
+    state.result = {
+      kind: 'breath',
+      retentions: this.retentions.slice(),
+      best: this.best,
+      total: this.total,
+      rounds: this.retentions.length,
+    };
+    state.screen = 'complete';
+    render();
+  }
+}
+
+// ───────── Meditation session ─────────
+
+class MedSession {
+  constructor(med) {
+    this.duration = med.duration * 60;
+    this.intervalBell = !!med.bell;
+    this.intervalSeconds = med.interval || 60;
+    this.startTime = performance.now();
+    this.pauseAcc = 0;
+    this.pauseStart = null;
+    this.paused = false;
+    this.lastBell = 0;
+    this.t = 0;
+    this.rafId = null;
+    this.exited = false;
+  }
+
+  mount() {
+    const root = h('div', { className: 'scene', dataset: { active: 'true' } });
+
+    this.btnPause = h('button', {
+      className: 'btn btn-icon', 'aria-label': 'Pause',
+      onclick: () => this.togglePause(),
+    }, icon('pause', 16));
+
+    root.append(
+      h('div', { className: 'header' },
+        h('button', {
+          className: 'btn btn-icon', 'aria-label': 'Exit',
+          onclick: () => this.exit(),
+        }, icon('close', 18)),
+        h('div', { className: 'rounder' }, 'Meditating'),
+        this.btnPause,
+      )
+    );
+
+    this.orb = buildOrbDOM();
+    root.append(h('div', { className: 'viz' }, this.orb.root));
+
+    this.subText = h('div', { className: 'caption' }, 'Stay with the breath');
+    root.append(h('div', { style: { padding: '16px 28px 32px', textAlign: 'center' } }, this.subText));
+
+    this.root = root;
+    this.loop = this.loop.bind(this);
+    this.rafId = requestAnimationFrame(this.loop);
+    return root;
+  }
+
+  unmount() {
+    this.exited = true;
+    if (this.rafId) cancelAnimationFrame(this.rafId);
+  }
+
+  togglePause() {
+    this.paused = !this.paused;
+    if (this.paused) this.pauseStart = performance.now();
+    else if (this.pauseStart != null) {
+      this.pauseAcc += performance.now() - this.pauseStart;
+      this.pauseStart = null;
+    }
+    clearKids(this.btnPause);
+    this.btnPause.append(icon(this.paused ? 'play' : 'pause', 16));
+    this.subText.textContent = this.paused ? 'Paused' : 'Stay with the breath';
+  }
+
+  loop(now) {
+    if (this.exited) return;
+    if (!this.paused) {
+      this.t = (now - this.startTime - this.pauseAcc) / 1000;
+      const remaining = Math.max(0, this.duration - this.t);
+
+      if (this.intervalBell && this.intervalSeconds > 0) {
+        if (this.t > 0 && Math.floor(this.t / this.intervalSeconds) > Math.floor(this.lastBell / this.intervalSeconds)) {
+          audio.chime();
+          haptic(40);
+          this.lastBell = this.t;
         }
       }
-    };
 
-    timer();
-  }
+      const scale = 0.45 + 0.15 * Math.sin(((now / 1000) % 8) * Math.PI / 4);
+      this.orb.setScale(Math.max(0, Math.min(1, scale)));
+      this.orb.setLabel('Settle');
+      this.orb.setTime(fmtTime(remaining));
+      this.orb.setSub(this.intervalBell
+        ? `Next bell in ${fmtTime(Math.max(0, this.intervalSeconds - (this.t - this.lastBell)))}`
+        : 'Eyes soft · breath natural');
 
-  updateRoundBadge() {
-    this.dom.roundBadge.textContent = `Round ${this.currentRound} of ${this.totalRounds}`;
-  }
-
-  finishSession() {
-    this.state = 'COMPLETE';
-    this.showStage(this.dom.stageComplete);
-
-    const bestHold = Math.max(...this.roundHoldTimes);
-    const totalHold = this.roundHoldTimes.reduce((a, b) => a + b, 0);
-
-    const summary = this.roundHoldTimes.map((time, i) => {
-      const secs = (time / 1000).toFixed(1);
-      return `<div class="summary-round"><span class="summary-round-label">Round ${i + 1}</span><span class="summary-round-time">${secs}s</span></div>`;
-    }).join('');
-
-    this.dom.sessionSummary.innerHTML = summary;
-
-    const saveBtn = Array.from(this.dom.btnPrimary).find(btn => btn.closest('#stage-complete'));
-    if (saveBtn) {
-      saveBtn.addEventListener('click', () => this.saveSession(bestHold, totalHold), { once: true });
-    }
-  }
-
-  saveSession(best, total) {
-    const session = {
-      date: new Date().toISOString(),
-      rounds: this.totalRounds,
-      best: Math.floor(best / 1000),
-      total: Math.floor(total / 1000),
-    };
-
-    let sessions = [];
-    try {
-      sessions = JSON.parse(localStorage.getItem('respire_sessions') || '[]');
-    } catch {}
-    sessions.push(session);
-    localStorage.setItem('respire_sessions', JSON.stringify(sessions));
-
-    this.renderLogs();
-    this.state = 'IDLE';
-    this.showStage(this.dom.stageIdle);
-  }
-
-  startMeditation() {
-    audio.resume();
-    this.state = 'MEDITATION';
-    this.meditationStartTime = Date.now();
-    const durationMs = this.meditationDuration * 60 * 1000;
-
-    this.showStage(this.dom.stageMeditation);
-
-    const bellIntervalMs = 60 * 1000;
-    let nextBell = bellIntervalMs;
-
-    const timer = () => {
-      const elapsed = Date.now() - this.meditationStartTime;
-      const remaining = Math.max(0, durationMs - elapsed);
-      const mins = Math.floor(remaining / 60000);
-      const secs = Math.floor((remaining % 60000) / 1000);
-
-      this.dom.meditationTimer.textContent = `${mins}:${String(secs).padStart(2, '0')}`;
-
-      if (this.dom.meditationIntervalToggle.checked && elapsed >= nextBell) {
-        audio.bell();
-        nextBell += bellIntervalMs;
+      if (remaining <= 0) {
+        audio.chime();
+        haptic([60, 100, 60]);
+        this.complete();
+        return;
       }
-
-      if (remaining > 0) {
-        this.meditationTimer = requestAnimationFrame(timer);
-      } else {
-        audio.bell();
-        this.state = 'IDLE';
-        this.showStage(this.dom.stageIdle);
-      }
-    };
-
-    timer();
-  }
-
-  stopMeditation() {
-    if (this.meditationTimer) cancelAnimationFrame(this.meditationTimer);
-    this.state = 'IDLE';
-    this.showStage(this.dom.stageIdle);
-  }
-
-  openModal() {
-    this.dom.modal.classList.remove('hidden');
-    this.dom.modalBackdrop.classList.remove('hidden');
-  }
-
-  closeModal() {
-    this.dom.modal.classList.add('hidden');
-    this.dom.modalBackdrop.classList.add('hidden');
-  }
-
-  saveAdvanced() {
-    saveConfig();
-    this.closeModal();
-  }
-
-  applyPreset(preset) {
-    if (preset === 'box') {
-      CONFIG.breathInMs = 4000;
-      CONFIG.breathHoldMs = 4000;
-      CONFIG.breathOutMs = 4000;
-      CONFIG.breathPauseMs = 4000;
-    } else if (preset === '478') {
-      CONFIG.breathInMs = 4000;
-      CONFIG.breathHoldMs = 7000;
-      CONFIG.breathOutMs = 8000;
-      CONFIG.breathPauseMs = 0;
     }
-    this.updateSliderDisplays();
+    this.rafId = requestAnimationFrame(this.loop);
   }
 
-  resetDefaults() {
-    CONFIG = { ...DEFAULT_CONFIG };
-    this.updateSliderDisplays();
+  exit() {
+    this.unmount();
+    state._session = null;
+    state.screen = 'main';
+    render();
   }
 
-  updateSliderDisplays() {
-    this.dom.breathingCyclesInput.value = CONFIG.breathCount;
-    this.dom.inhaleDurationInput.value = CONFIG.breathInMs / 1000;
-    this.dom.holdDurationInput.value = CONFIG.breathHoldMs / 1000;
-    this.dom.exhaleDurationInput.value = CONFIG.breathOutMs / 1000;
-    this.dom.pauseDurationInput.value = CONFIG.breathPauseMs / 1000;
-    this.dom.recoveryDurationInput.value = CONFIG.recoveryHoldMs / 1000;
-
-    this.dom.breathingCyclesValue.textContent = CONFIG.breathCount;
-    this.dom.inhaleDurationValue.textContent = (CONFIG.breathInMs / 1000).toFixed(1) + 's';
-    this.dom.holdDurationValue.textContent = (CONFIG.breathHoldMs / 1000).toFixed(1) + 's';
-    this.dom.exhaleDurationValue.textContent = (CONFIG.breathOutMs / 1000).toFixed(1) + 's';
-    this.dom.pauseDurationValue.textContent = (CONFIG.breathPauseMs / 1000).toFixed(1) + 's';
-    this.dom.recoveryDurationValue.textContent = (CONFIG.recoveryHoldMs / 1000).toFixed(1) + 's';
-  }
-
-  toggleMute() {
-    audio.isMuted = !audio.isMuted;
-    localStorage.setItem('respire_muted', audio.isMuted);
-    this.dom.btnMute.classList.toggle('muted');
-  }
-
-  toggleDarkMode() {
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    if (isDark) {
-      document.documentElement.removeAttribute('data-theme');
-      localStorage.setItem('respire_dark', 'false');
-    } else {
-      document.documentElement.setAttribute('data-theme', 'dark');
-      localStorage.setItem('respire_dark', 'true');
-    }
-  }
-
-  toggleHaptic() {
-    this.dom.btnHaptic.classList.toggle('muted');
-  }
-
-  renderLogs() {
-    let sessions = [];
-    try {
-      sessions = JSON.parse(localStorage.getItem('respire_sessions') || '[]');
-    } catch {}
-
-    if (!sessions.length) {
-      this.dom.logsTbody.innerHTML = '<tr><td colspan="3">No sessions yet</td></tr>';
-      return;
-    }
-
-    const rows = sessions.map(s => {
-      const date = new Date(s.date).toLocaleDateString();
-      return `<tr><td>${date}</td><td>${s.rounds}</td><td>${s.best}s / ${s.total}s</td></tr>`;
-    }).join('');
-
-    this.dom.logsTbody.innerHTML = rows;
-  }
-
-  clearLogs() {
-    if (confirm('Clear all sessions?')) {
-      localStorage.removeItem('respire_sessions');
-      this.renderLogs();
-    }
+  complete() {
+    this.unmount();
+    state._session = null;
+    state.result = { kind: 'meditate', duration: this.duration };
+    state.screen = 'complete';
+    render();
   }
 }
 
-const app = new BreathingApp();
+// ───────── Complete screen ─────────
+
+function sceneComplete() {
+  const r = state.result || { kind: 'breath', retentions: [], best: 0, total: 0 };
+
+  const orb = h('div', { className: 'orb-wrap', style: { width: '180px', height: '180px' } });
+  orb.innerHTML = `
+    <div class="orb-ring r1" style="transform: scale(1); opacity: 0.4"></div>
+    <div class="orb-ring r2" style="transform: scale(1); opacity: 0.6"></div>
+    <div class="orb-ring r3" style="transform: scale(1)"></div>
+    <div style="position: absolute; inset: 0; display: grid; place-items: center; z-index: 3; color: #FFFFFF;">
+      <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+    </div>
+  `;
+
+  const stats = r.kind === 'breath'
+    ? h('div', { style: { marginTop: '22px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' } },
+        statCard((r.retentions || []).length, 'Rounds'),
+        statCard(fmtTime(r.best || 0), 'Best hold'),
+        statCard(fmtTime(r.total || 0), 'Total hold'),
+      )
+    : h('div', { style: { marginTop: '22px', display: 'grid', gridTemplateColumns: '1fr', gap: '8px' } },
+        statCard(fmtTime(r.duration || 0), 'Time sat')
+      );
+
+  const root = h('div', { className: 'scene', dataset: { active: 'true' } },
+    h('div', { className: 'header', style: { paddingTop: '16px' } }, brandMark(), h('span')),
+    h('div', { className: 'scroll', style: { padding: '0 28px 24px' } },
+      h('div', { className: 'center', style: { padding: '8px 0 28px' } }, orb),
+      h('div', { className: 'eyebrow', style: { textAlign: 'center' } }, 'Session complete'),
+      h('h1', { className: 'title-xl', style: { textAlign: 'center', margin: '8px 0 6px' } },
+        r.kind === 'breath' ? 'Strong work.' : 'Stillness.'),
+      h('p', { className: 'body', style: { textAlign: 'center', margin: '0 auto', maxWidth: '320px' } },
+        r.kind === 'breath'
+          ? 'Sit for a minute. Notice the calm in your chest.'
+          : 'Carry this stillness with you for the rest of your day.'),
+      stats,
+      r.kind === 'breath' && r.retentions && r.retentions.length > 0
+        ? h('div', { className: 'card', style: { marginTop: '14px' } },
+            h('div', { className: 'eyebrow', style: { marginBottom: '12px' } }, 'Retention by round'),
+            retentionChart(r.retentions)
+          )
+        : null,
+    ),
+    h('div', { style: { padding: '12px 24px calc(20px + var(--safe-bot))', display: 'flex', gap: '10px' } },
+      h('button', { className: 'btn btn-ghost', style: { flex: '1' }, onclick: discardResult }, 'Discard'),
+      h('button', { className: 'btn btn-coral', style: { flex: '1.4' }, onclick: saveResult }, 'Save & view logs'),
+    ),
+  );
+
+  return root;
+}
+
+function retentionChart(retentions) {
+  const max = Math.max(...retentions, 30);
+  return h('div', { style: { display: 'flex', alignItems: 'flex-end', gap: '10px', height: '100px', padding: '0 4px' } },
+    retentions.map((s, i) =>
+      h('div', { className: 'col', style: { flex: '1', alignItems: 'center', gap: '6px', justifyContent: 'flex-end', height: '100%' } },
+        h('span', { className: 'numeric', style: { fontSize: '12px', color: 'var(--ink)' } }, fmtTime(s)),
+        h('div', { style: {
+          width: '100%',
+          height: `${(s / max) * 70}px`,
+          background: 'linear-gradient(180deg, var(--coral), var(--coral-deep))',
+          borderRadius: '6px 6px 2px 2px',
+        } }),
+        h('span', { className: 'caption', style: { fontSize: '10px' } }, `R${i + 1}`),
+      )
+    )
+  );
+}
+
+// ───────── Result actions ─────────
+
+function dateLabel() {
+  const d = new Date();
+  return 'Today · ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function saveResult() {
+  const r = state.result;
+  if (r) {
+    const entry = r.kind === 'breath'
+      ? { kind: 'breath', date: dateLabel(), rounds: (r.retentions || []).length, best: r.best, total: r.total }
+      : { kind: 'meditate', date: dateLabel(), duration: r.duration };
+    state.history = [entry, ...state.history];
+    saveHistory(state.history);
+  }
+  state.result = null;
+  state.screen = 'main';
+  state.tab = 'history';
+  render();
+  showToast('Session saved');
+}
+
+function discardResult() {
+  state.result = null;
+  state.screen = 'main';
+  render();
+}
+
+// ───────── Session entry ─────────
+
+function startBreath() {
+  audio.resume();
+  state._session = new BreathSession(state.breath);
+  state.screen = 'breath-session';
+  render();
+}
+
+function startMed() {
+  audio.resume();
+  state._session = new MedSession(state.med);
+  state.screen = 'meditate-session';
+  render();
+}
+
+// ───────── Render ─────────
+
+const shell = document.getElementById('app-shell');
+
+// Persistent overlay elements — never removed, toggled via data-attrs so CSS transitions fire
+let _currentScene = null;
+const _sheetBackdropEl = h('div', { className: 'sheet-backdrop', dataset: { open: 'false' },
+  onclick: () => { state.advancedOpen = false; updateSheet(); } });
+const _sheetEl = h('div', { className: 'sheet', dataset: { open: 'false' } });
+const _toastEl = h('div', { className: 'toast', dataset: { show: 'false' } });
+
+function updateSheet() {
+  const open = !!state.advancedOpen;
+  _sheetBackdropEl.dataset.open = open ? 'true' : 'false';
+  _sheetEl.dataset.open = open ? 'true' : 'false';
+  clearKids(_sheetEl);
+  if (open) _sheetEl.append(...buildSheetContents());
+}
+
+function updateToast() {
+  _toastEl.dataset.show = state._toastText ? 'true' : 'false';
+  _toastEl.textContent = state._toastText || '';
+}
+
+function render() {
+  if (!_sheetBackdropEl.parentNode) {
+    shell.append(_sheetBackdropEl, _sheetEl, _toastEl);
+  }
+  if (_currentScene && _currentScene.parentNode) _currentScene.remove();
+
+  if (state.screen === 'onboarding') _currentScene = sceneOnboarding();
+  else if (state.screen === 'breath-session') _currentScene = state._session ? state._session.mount() : sceneMain();
+  else if (state.screen === 'meditate-session') _currentScene = state._session ? state._session.mount() : sceneMain();
+  else if (state.screen === 'complete') _currentScene = sceneComplete();
+  else _currentScene = sceneMain();
+
+  shell.insertBefore(_currentScene, _sheetBackdropEl);
+  updateSheet();
+  updateToast();
+}
+
+// ───────── Boot ─────────
+
+function boot() {
+  state.breath  = loadJSON(KEYS.breath, DEFAULT_BREATH);
+  state.med     = loadJSON(KEYS.med, DEFAULT_MED);
+  state.tweaks  = loadJSON(KEYS.tweaks, DEFAULT_TWEAKS);
+  state.history = loadHistory();
+  applyTheme();
+
+  const done = localStorage.getItem(KEYS.onboarding) === 'true';
+  state.screen = done ? 'main' : 'onboarding';
+
+  // Dev hook (localhost / file://) for screenshot harness
+  const host = location.hostname;
+  if (!host || host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') {
+    window.respire = { state, render, startBreath, startMed };
+  }
+
+  render();
+}
+
+boot();

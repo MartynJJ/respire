@@ -1,120 +1,86 @@
 # Respire
 
-A beautifully simple, browser-based app for guided cyclic breathing exercises. Perfect for improving breath control, focus, and relaxation.
+A browser-based breathing and meditation app. Warm cream + coral aesthetic, three-ring breath orb, refined typography (Geist). Vanilla HTML/CSS/JS — no build step.
 
 ## Features
 
-- **Guided Power Breathing**: 30-breath cycles with visual and audio cues
-- **Retention Hold**: Track how long you can hold your breath
-- **Recovery Breath**: 15-second guided recovery phase
-- **Multi-Round Sessions**: Complete 3+ rounds in a single session
-- **Meditation Timer**: Standalone meditation mode with configurable durations and optional interval bells
-- **Session Logging**: All hold times saved to browser localStorage
-- **Zero Dependencies**: No npm packages, no build step
-- **Audio Feedback**: Web Audio API tone generation (configurable mute)
+- **Breathwork session** — Round-by-round cycles with a 3-second countdown, eased orb animation per inhale/exhale, mid-cycle holds, open-ended retention hold, and timed recovery.
+- **Meditation timer** — Preset durations (5/10/15/20/30m) or a custom 1–90 min slider. Optional interval bell.
+- **Presets** — Wim Hof, Box 4-4-4-4, 4-7-8, Tummo. Or fully tune cycles per round, inhale/hold/exhale/hold timings, and recovery length.
+- **History** — Sessions stored in localStorage. Stats card (total sessions, total time, best hold) + per-session rows.
+- **Settings** — Dark mode (warm-black), sound chimes, haptic feedback.
+- **Bottom tab bar** — Home · History · Settings.
+- **Zero dependencies** — Plain HTML/CSS/JS. Loads Geist from Google Fonts.
 
 ## Quick Start
 
-1. Clone or download this repo
-2. Open `index.html` in a web browser
-3. Click "Start" to begin
+1. Clone or download the repo.
+2. Open `index.html` in a modern browser, or serve the directory over HTTP (recommended for the Web Audio API).
+3. First load walks through the 3-slide onboarding.
 
-That's it! No server needed.
-
-## How It Works
-
-### The Breathing Cycle
-
-Each round consists of 4 phases:
-
-1. **Power Breathing** (~2.5 minutes)
-   - 30 deep breath cycles
-   - Visual circle expands/contracts to guide tempo
-   - Audio cues for inhale/exhale
-
-2. **Retention Hold** (variable)
-   - After final exhale, hold your breath as long as possible
-   - Timer starts when you click "Start Hold"
-   - Click "Done" when you need to breathe
-   - Your hold time is recorded
-
-3. **Recovery Breath** (15 seconds)
-   - Deep inhale and hold for 15 seconds
-   - Countdown with audio cues
-
-4. **Repeat**
-   - Default: 3 rounds per session
-   - Configurable in the UI
-
-### Meditation Timer
-
-Switch to the **Meditate** tab on the idle screen to access the meditation timer.
-
-- **Duration**: Choose from preset durations (5, 10, 15, 20, 30 minutes) or enter a custom duration
-- **Interval Bells** (optional): Enable to hear a soft bell tone every 60 seconds
-- **Countdown**: Timer counts down the remaining time
-- **End Tone**: A louder, distinct chime sounds when meditation is complete
-- **Stop Anytime**: Click "Stop" to end the meditation session early
-
-Perfect for daily mindfulness practice alongside the breathwork sessions.
-
-### Audio Cues
-
-**Breathwork:**
-- **Inhale**: Low tone (220 Hz)
-- **Exhale**: Mid tone (330 Hz)
-- **Hold Start**: Deep gong (110 Hz)
-- **Recovery**: Bright chime (440 Hz)
-- **Countdown**: Rapid beeps (880 Hz) in final 3 seconds
-
-**Meditation:**
-- **Interval Bell**: Soft tone (528 Hz) every 60 seconds (optional)
-- **End Tone**: Louder chime (440 Hz + 880 Hz) when meditation completes
-
-Mute/unmute anytime with the 🔊 button. Muting suppresses all audio cues.
-
-## Session Logs
-
-All sessions are automatically saved to browser localStorage (key: `bw_sessions`). View them in the "Session History" section below the main app.
-
-### Data Structure
-
-```json
-{
-  "id": "2026-05-14T10:23:00.000Z",
-  "rounds": [
-    { "round": 1, "holdMs": 87000 },
-    { "round": 2, "holdMs": 95000 },
-    { "round": 3, "holdMs": 112000 }
-  ],
-  "completedRounds": 3
-}
+```bash
+# optional local server
+python3 -m http.server 8000
 ```
 
-## Configuration
+## How it works
 
-Edit `CONFIG` in `app.js` to customize breathwork and meditation settings. All settings persist via browser localStorage.
+### Breathwork cycle
 
-**Breathwork:**
-- `breathCount`: Number of breaths per cycle (default: 30)
-- `breathInMs`: Inhale duration (default: 2000ms)
-- `breathOutMs`: Exhale duration (default: 2000ms)
-- `breathPauseMs`: Pause between breaths (default: 1000ms)
-- `recoveryHoldMs`: Recovery phase duration (default: 15000ms)
-- `defaultRounds`: Default number of rounds per session (default: 3)
+Each round runs as a state machine:
 
-**Meditation:**
-- `meditationDurationMs`: Default meditation duration (default: 600000ms / 10 minutes)
-- `meditationIntervalMs`: Interval between bell tones (default: 60000ms / 60 seconds)
-- `meditationIntervalEnabled`: Enable/disable interval bells (default: true)
+```
+countdown (3s) → [inhale → (holdIn) → exhale → (holdOut)] × N cycles
+              → retention (open-ended)
+              → recovery (configurable, default 15s)
+              → next round, or done
+```
 
-## Browser Compatibility
+Holds with duration `0` are skipped automatically.
 
-Works in all modern browsers with Web Audio API support:
-- Chrome/Edge 14+
-- Firefox 25+
-- Safari 14.1+
-- Opera 11+
+### Audio cues
+
+Generated with Web Audio API oscillators:
+
+| Phase            | Frequency | Type   |
+|------------------|-----------|--------|
+| Inhale           | 220 Hz    | sine   |
+| Exhale           | 330 Hz    | sine   |
+| Hold (in / out)  | 110 Hz    | sine   |
+| End of cycles    | 330 Hz    | sine   |
+| Recovery start   | 440 Hz    | sine   |
+| Round/end chime  | 660 + 990 | sine   |
+| Countdown end    | 880 Hz    | square |
+
+Toggle in Settings → **Sound**.
+
+### Haptics
+
+Short `navigator.vibrate` pulses on inhale/exhale, longer patterns at retention start, recovery, and session end. Toggle in Settings → **Haptics**.
+
+## Persistence (localStorage)
+
+| Key                          | Contents                                           |
+|------------------------------|----------------------------------------------------|
+| `respire_breath`             | `{ rounds, cycles, inhale, holdIn, exhale, holdOut, recovery }` |
+| `respire_med`                | `{ duration, bell, interval }`                     |
+| `respire_tweaks`             | `{ dark, sound, haptics }`                         |
+| `respire_history`            | `[{ kind, date, ... }]`                            |
+| `respire_onboarding_done`    | `"true"` once finished                             |
+
+On first load, any legacy `respire_sessions` data is migrated into `respire_history` with `kind: "breath"`.
+
+## Browser compatibility
+
+Modern Chromium / Firefox / Safari. Uses Web Audio API and `navigator.vibrate` (vibration is no-op where unsupported).
+
+## Project structure
+
+```
+index.html   — minimal shell, mounts #app-shell
+style.css    — design system (warm cream/coral, orb, sheet, tab bar)
+app.js       — vanilla port of the React design (scene router + session FSM)
+```
 
 ## License
 
