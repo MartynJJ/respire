@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Respire">
-  <meta name="theme-color" content="#667eea">
+  <meta name="theme-color" content="#ED5A36">
   <title>Respire</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -15,14 +15,45 @@
     <header>
       <h1>Respire</h1>
       <div class="header-controls">
-        <button id="btn-haptic" class="control-btn haptic-btn" title="Toggle haptic feedback">📳</button>
         <button id="btn-dark-mode" class="control-btn" title="Toggle dark mode">🌙</button>
-        <button id="btn-vocals" class="control-btn" title="Toggle tones/vocals">🎵</button>
-        <button id="btn-mute" class="control-btn mute-btn" title="Toggle audio">🔊</button>
+        <button id="btn-mute" class="control-btn" title="Toggle audio">🔊</button>
+        <button id="btn-haptic" class="control-btn" title="Toggle haptics">📳</button>
       </div>
     </header>
 
     <main id="stage-panel" class="stage-panel">
+      <!-- ONBOARDING -->
+      <div data-stage="onboarding" class="stage idle" style="display: flex;">
+        <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+          <div class="onboarding-slide" style="display: flex;">
+            <div style="text-align: center;">
+              <div style="font-size: 60px; margin-bottom: 32px;">🌬️</div>
+              <h2 style="font-size: 24px; margin-bottom: 12px;">Welcome to Respire</h2>
+              <p style="font-size: 14px; color: var(--ink-light); margin-bottom: 32px;">Master your breath, calm your mind, and unlock resilience.</p>
+            </div>
+          </div>
+          <div class="onboarding-slide" style="display: none;">
+            <div style="text-align: center;">
+              <div style="font-size: 60px; margin-bottom: 32px;">⚠️</div>
+              <h2 style="font-size: 24px; margin-bottom: 12px;">A Quick Note</h2>
+              <p style="font-size: 14px; color: var(--ink-light); margin-bottom: 32px;">Breathwork can be intense. If you feel dizzy or unwell, pause immediately. Never practice while driving.</p>
+            </div>
+          </div>
+          <div class="onboarding-slide" style="display: none;">
+            <div style="text-align: center;">
+              <div style="font-size: 60px; margin-bottom: 32px;">⚡</div>
+              <h2 style="font-size: 24px; margin-bottom: 12px;">Find Your Pace</h2>
+              <p style="font-size: 14px; color: var(--ink-light); margin-bottom: 32px;">Start with 3 rounds and adjust in Advanced Options. Listen to your body.</p>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; width: 100%; max-width: 400px;">
+            <button class="btn-secondary onboarding-prev-btn" style="display: none;">Back</button>
+            <button class="btn-text onboarding-skip-btn">Skip</button>
+            <button class="btn-primary onboarding-next-btn">Next</button>
+          </div>
+        </div>
+      </div>
+
       <!-- IDLE state -->
       <div id="stage-idle" class="stage idle">
         <div class="mode-tabs">
@@ -32,13 +63,13 @@
 
         <div id="breathwork-config">
           <h2>Ready to begin?</h2>
-          <p>This session will guide you through 3 rounds of breathwork.</p>
+          <p>This session will guide you through breathing rounds.</p>
           <div class="config-group">
-            <label for="rounds-input">Number of rounds:</label>
+            <label for="rounds-input">Rounds:</label>
             <input id="rounds-input" type="number" min="1" max="10" value="3">
           </div>
           <button id="btn-primary" class="btn-primary">Start</button>
-          <button id="btn-advanced" class="btn-secondary" style="width: 100%; margin-top: 10px;">Advanced Options</button>
+          <button id="btn-advanced" class="btn-secondary" style="margin-top: 10px;">Advanced Options</button>
         </div>
 
         <div id="meditation-config" class="hidden">
@@ -54,12 +85,12 @@
           </div>
 
           <div class="config-group">
-            <label for="meditation-custom-minutes">Custom (minutes):</label>
+            <label for="meditation-custom-minutes">Custom (min):</label>
             <input id="meditation-custom-minutes" type="number" min="1" max="120" value="10">
           </div>
 
-          <div class="config-group toggle-group">
-            <label for="meditation-interval-toggle">Interval bell (every 60s):</label>
+          <div class="toggle-group">
+            <label for="meditation-interval-toggle">Interval bell:</label>
             <input id="meditation-interval-toggle" type="checkbox" checked>
           </div>
 
@@ -73,7 +104,7 @@
         <div id="circle" class="circle"></div>
         <div class="breathing-info">
           <div class="breathing-label" id="breathing-label">INHALE</div>
-          <div class="breath-counter" id="breath-counter">0 / 30</div>
+          <div class="breath-counter" id="breath-counter">0.0s</div>
         </div>
         <button id="btn-pause-breathe" class="btn-secondary pause-btn">Pause</button>
       </div>
@@ -81,8 +112,8 @@
       <!-- HOLD state -->
       <div id="stage-hold" class="stage hold hidden">
         <div class="round-badge" id="hold-round-badge"></div>
-        <h2>Retention Hold</h2>
-        <p>Exhale fully and hold your breath.</p>
+        <h2>Breath Hold</h2>
+        <p>Hold your breath and see how long you can go.</p>
         <div class="timer-display" id="hold-timer">0:00</div>
         <button id="btn-primary" class="btn-primary hidden">Start Hold</button>
         <button id="btn-done" class="btn-primary hidden">Done</button>
@@ -108,7 +139,7 @@
       <!-- MEDITATION state -->
       <div id="stage-meditation" class="stage meditation hidden">
         <div class="round-badge" id="meditation-badge">Meditating</div>
-        <div class="timer-display" id="meditation-timer">10:00</div>
+        <div id="meditation-timer">10:00</div>
         <div class="meditation-subtext" id="meditation-interval-label">Next bell in 1:00</div>
         <button id="btn-stop-meditation" class="btn-secondary">Stop</button>
       </div>
@@ -154,8 +185,8 @@
             <label for="inhale-duration">Inhale Duration</label>
             <span class="option-value" id="inhale-duration-value">0.5s</span>
           </div>
-          <input id="inhale-duration" type="range" min="200" max="5000" step="100" value="500">
-          <small>0.2s to 5.0s</small>
+          <input id="inhale-duration" type="range" min="0.2" max="5" step="0.1" value="0.5">
+          <small>0.2 to 5.0 seconds</small>
         </div>
 
         <div class="option-group">
@@ -163,8 +194,8 @@
             <label for="hold-duration">Hold After Inhale</label>
             <span class="option-value" id="hold-duration-value">0.0s</span>
           </div>
-          <input id="hold-duration" type="range" min="0" max="8000" step="500" value="0">
-          <small>0.0s to 8.0s</small>
+          <input id="hold-duration" type="range" min="0" max="8" step="0.5" value="0">
+          <small>0.0 to 8.0 seconds</small>
         </div>
 
         <div class="option-group">
@@ -172,8 +203,8 @@
             <label for="exhale-duration">Exhale Duration</label>
             <span class="option-value" id="exhale-duration-value">0.5s</span>
           </div>
-          <input id="exhale-duration" type="range" min="200" max="10000" step="100" value="500">
-          <small>0.2s to 10.0s</small>
+          <input id="exhale-duration" type="range" min="0.2" max="10" step="0.1" value="0.5">
+          <small>0.2 to 10.0 seconds</small>
         </div>
 
         <div class="option-group">
@@ -181,8 +212,8 @@
             <label for="pause-duration">Hold After Exhale</label>
             <span class="option-value" id="pause-duration-value">0.0s</span>
           </div>
-          <input id="pause-duration" type="range" min="0" max="8000" step="500" value="0">
-          <small>0.0s to 8.0s</small>
+          <input id="pause-duration" type="range" min="0" max="8" step="0.5" value="0">
+          <small>0.0 to 8.0 seconds</small>
         </div>
 
         <div class="option-group">
@@ -190,24 +221,24 @@
             <label for="recovery-duration">Recovery Hold Duration</label>
             <span class="option-value" id="recovery-duration-value">15s</span>
           </div>
-          <input id="recovery-duration" type="range" min="5000" max="60000" step="1000" value="15000">
-          <small>5s to 60s</small>
+          <input id="recovery-duration" type="range" min="5" max="60" step="1" value="15">
+          <small>5 to 60 seconds</small>
         </div>
 
         <div class="divider"></div>
 
-        <div style="margin-bottom: 10px;">
-          <div class="option-section-label">Presets</div>
-          <button id="btn-preset-box" class="btn-secondary" style="width: 100%;">Box Breathing (4-4-4-4)</button>
-          <button id="btn-preset-478" class="btn-secondary" style="width: 100%; margin-top: 8px;">4-7-8 Breathing</button>
+        <div style="margin-bottom: 16px;">
+          <h4 style="font-size: 12px; text-transform: uppercase; color: var(--ink-light); margin-bottom: 8px;">Presets</h4>
+          <button id="btn-preset-box" class="btn-secondary" style="margin-bottom: 8px;">Box Breathing (4-4-4-4)</button>
+          <button id="btn-preset-478" class="btn-secondary">4-7-8 Breathing</button>
         </div>
 
         <div class="divider"></div>
 
-        <button id="btn-reset-defaults" class="btn-secondary" style="width: 100%; margin-bottom: 10px;">Reset to Defaults</button>
+        <button id="btn-reset-defaults" class="btn-secondary" style="margin-bottom: 16px;">Reset to Defaults</button>
       </div>
       <div class="modal-footer">
-        <button id="btn-modal-save" class="btn-primary" style="width: 100%;">Save Options</button>
+        <button id="btn-modal-save" class="btn-primary">Save Options</button>
       </div>
     </div>
   </div>
