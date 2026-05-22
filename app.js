@@ -16,9 +16,9 @@ const KEYS = {
 const DEFAULT_BREATH = {
   rounds: 3,
   cycles: 30,
-  inhale: 1.5,
+  inhale: 0.5,
   holdIn: 0,
-  exhale: 1.5,
+  exhale: 0.5,
   holdOut: 0,
   recovery: 15,
 };
@@ -38,7 +38,7 @@ const DEFAULT_TWEAKS = {
 };
 
 const PRESETS = [
-  { name: 'Wim Hof',     rounds: 3, cycles: 30, inhale: 1.5, holdIn: 0, exhale: 1.5, holdOut: 0, recovery: 15 },
+  { name: 'Wim Hof',     rounds: 3, cycles: 30, inhale: 0.5, holdIn: 0, exhale: 0.5, holdOut: 0, recovery: 15 },
   { name: 'Box 4-4-4-4', rounds: 3, cycles: 12, inhale: 4,   holdIn: 4, exhale: 4,   holdOut: 4, recovery: 0  },
   { name: '4-7-8',       rounds: 3, cycles: 8,  inhale: 4,   holdIn: 7, exhale: 8,   holdOut: 0, recovery: 0  },
   { name: 'Tummo',       rounds: 4, cycles: 40, inhale: 1,   holdIn: 0, exhale: 1,   holdOut: 0, recovery: 20 },
@@ -329,14 +329,19 @@ function switchEl(value, onChange) {
 }
 
 function slider(label, value, min, max, step, unit, onChange) {
+  const valSpan = h('span', { className: 'numeric', style: { fontSize: '14px', fontWeight: '600' } }, `${value}${unit}`);
   return h('div', { className: 'col', style: { gap: '8px', padding: '12px 0' } },
     h('div', { className: 'row', style: { justifyContent: 'space-between' } },
       h('span', { style: { fontSize: '14px', fontWeight: '500' } }, label),
-      h('span', { className: 'numeric', style: { fontSize: '14px', fontWeight: '600' } }, `${value}${unit}`)
+      valSpan,
     ),
     h('input', {
       className: 'range', type: 'range', min, max, step, value,
-      oninput: (e) => onChange(parseFloat(e.target.value)),
+      oninput: (e) => {
+        const v = parseFloat(e.target.value);
+        valSpan.textContent = `${v}${unit}`;
+        onChange(v);
+      },
     }),
     h('div', { className: 'row', style: { justifyContent: 'space-between' } },
       h('span', { className: 'caption' }, `${min}${unit}`),
@@ -613,6 +618,28 @@ function medHomeView() {
   const m = state.med;
   const presets = [5, 10, 15, 20, 30];
 
+  // DOM refs updated in-place by the duration slider so scrolling isn't disrupted
+  const durTitle = h('span', { style: { color: 'var(--coral)' } },
+    `Stay ${m.duration} ${m.duration === 1 ? 'minute' : 'minutes'}.`);
+  const durLabel = h('span', { className: 'numeric', style: { fontSize: '14px', fontWeight: '600' } }, `${m.duration}m`);
+  let pillBtns = [];
+
+  const onDurationChange = (v) => {
+    state.med.duration = v;
+    saveMed();
+    durTitle.textContent = `Stay ${v} ${v === 1 ? 'minute' : 'minutes'}.`;
+    durLabel.textContent = `${v}m`;
+    pillBtns.forEach(b => b.setAttribute('aria-selected', +b.dataset.val === v ? 'true' : 'false'));
+  };
+
+  pillBtns = presets.map(p =>
+    h('button', {
+      'aria-selected': m.duration === p ? 'true' : 'false',
+      dataset: { val: String(p) },
+      onclick: () => onDurationChange(p),
+    }, `${p}m`)
+  );
+
   return h('div', { className: 'scroll', style: { padding: '8px 24px 24px' } },
     segmented(state.mode, [
       { value: 'breath', label: 'Breathwork' },
@@ -622,33 +649,22 @@ function medHomeView() {
     h('div', { style: { height: '28px' } }),
 
     h('div', { className: 'eyebrow' }, 'Meditation Timer'),
-    h('h1', { className: 'title-xl', style: { margin: '6px 0 0' } },
-      'Sit quietly.', h('br'),
-      h('span', { style: { color: 'var(--coral)' } },
-        `Stay ${m.duration} ${m.duration === 1 ? 'minute' : 'minutes'}.`)
-    ),
+    h('h1', { className: 'title-xl', style: { margin: '6px 0 0' } }, 'Sit quietly.', h('br'), durTitle),
     h('p', { className: 'body', style: { margin: '10px 0 0', maxWidth: '360px' } },
       'Choose a duration and a bell interval. The timer rings when complete.'),
 
     h('div', { className: 'card', style: { marginTop: '22px', padding: '18px' } },
       h('div', { className: 'eyebrow', style: { marginBottom: '12px' } }, 'Duration'),
-      h('div', { className: 'pill-options' },
-        presets.map(p =>
-          h('button', {
-            'aria-selected': m.duration === p ? 'true' : 'false',
-            onclick: () => { state.med.duration = p; saveMed(); render(); },
-          }, `${p}m`)
-        )
-      ),
+      h('div', { className: 'pill-options' }, ...pillBtns),
       h('div', { className: 'divider', style: { margin: '18px 0' } }),
       h('div', { className: 'col', style: { gap: '8px' } },
         h('div', { className: 'row', style: { justifyContent: 'space-between' } },
           h('span', { style: { fontSize: '14px', fontWeight: '500' } }, 'Custom duration'),
-          h('span', { className: 'numeric', style: { fontSize: '14px', fontWeight: '600' } }, `${m.duration}m`),
+          durLabel,
         ),
         h('input', {
           className: 'range', type: 'range', min: '1', max: '90', step: '1', value: m.duration,
-          oninput: (e) => { state.med.duration = parseInt(e.target.value, 10); saveMed(); render(); },
+          oninput: (e) => onDurationChange(parseInt(e.target.value, 10)),
         })
       )
     ),
@@ -858,7 +874,7 @@ function buildSheetContents() {
             onclick: () => {
               Object.assign(state.breath, p);
               saveBreath();
-              render();
+              updateSheet();
             },
           }, p.name);
         })
@@ -867,26 +883,26 @@ function buildSheetContents() {
 
       h('div', { className: 'eyebrow', style: { paddingTop: '12px' } }, 'Round structure'),
       slider('Breathing Cycles', s.cycles, 5, 100, 1, ' cycles',
-        (v) => { state.breath.cycles = v; saveBreath(); render(); }),
+        (v) => { state.breath.cycles = v; saveBreath(); }),
       slider('Recovery Hold', s.recovery, 5, 60, 1, 's',
-        (v) => { state.breath.recovery = v; saveBreath(); render(); }),
+        (v) => { state.breath.recovery = v; saveBreath(); }),
 
       h('div', { className: 'eyebrow', style: { paddingTop: '16px' } }, 'Per-cycle timings'),
       slider('Inhale', s.inhale, 0.2, 8, 0.1, 's',
-        (v) => { state.breath.inhale = +v.toFixed(1); saveBreath(); render(); }),
+        (v) => { state.breath.inhale = +v.toFixed(1); saveBreath(); }),
       slider('Hold after inhale', s.holdIn, 0, 10, 0.5, 's',
-        (v) => { state.breath.holdIn = +v.toFixed(1); saveBreath(); render(); }),
+        (v) => { state.breath.holdIn = +v.toFixed(1); saveBreath(); }),
       slider('Exhale', s.exhale, 0.2, 10, 0.1, 's',
-        (v) => { state.breath.exhale = +v.toFixed(1); saveBreath(); render(); }),
+        (v) => { state.breath.exhale = +v.toFixed(1); saveBreath(); }),
       slider('Hold after exhale', s.holdOut, 0, 10, 0.5, 's',
-        (v) => { state.breath.holdOut = +v.toFixed(1); saveBreath(); render(); }),
+        (v) => { state.breath.holdOut = +v.toFixed(1); saveBreath(); }),
     ),
     h('div', { style: { padding: '12px 24px calc(20px + var(--safe-bot))', display: 'flex', gap: '10px' } },
       h('button', { className: 'btn btn-ghost', style: { flex: '1' },
         onclick: () => {
           Object.assign(state.breath, DEFAULT_BREATH);
           saveBreath();
-          render();
+          updateSheet();
         } }, 'Reset'),
       h('button', { className: 'btn btn-primary', style: { flex: '1.4' },
         onclick: () => { state.advancedOpen = false; render(); } }, 'Save'),
