@@ -1,85 +1,71 @@
 # Respire
 
-A browser-based breathing and meditation app. Warm cream + coral aesthetic, three-ring breath orb, refined typography (Geist). Vanilla HTML/CSS/JS — no build step.
+A browser-based breathing and meditation app. Warm cream + coral aesthetic, three-ring breath orb, Geist typography. Vanilla HTML/CSS/JS — no build step.
 
 ## Features
 
-- **Breathwork session** — Round-by-round cycles with a 3-second countdown, eased orb animation per inhale/exhale, mid-cycle holds, open-ended retention hold, and timed recovery.
-- **Meditation timer** — Preset durations (5/10/15/20/30m) or a custom 1–90 min slider. Optional interval bell.
-- **Presets** — Wim Hof, Box 4-4-4-4, 4-7-8, Tummo. Or fully tune cycles per round, inhale/hold/exhale/hold timings, and recovery length.
-- **History** — Sessions stored in localStorage. Stats card (total sessions, total time, best hold) + per-session rows.
-- **Settings** — Dark mode (warm-black), sound chimes, haptic feedback.
-- **Bottom tab bar** — Home · History · Settings.
-- **Zero dependencies** — Plain HTML/CSS/JS. Loads Geist from Google Fonts.
+- **Breathwork** — Round-by-round cycles with a 3-second countdown, eased orb animation, mid-cycle holds, open-ended retention hold, and timed recovery.
+- **Meditation timer** — Preset durations (5/10/15/20/30 min) or a custom 1–90 min slider. Optional interval bell.
+- **Presets** — Wim Hof, Box 4-4-4-4, 4-7-8, Tummo. Fully customisable: cycles per round, inhale/hold/exhale/hold timings, recovery length.
+- **History** — Sessions stored in localStorage. Stats card (total sessions, total time, best hold) and per-session rows.
+- **Settings** — Dark mode, sound chimes, haptic feedback, voice guidance (Web Speech API).
+- **Zero dependencies** — Plain HTML/CSS/JS. Geist loaded from Google Fonts.
 
-## Quick Start
-
-1. Clone or download the repo.
-2. Open `index.html` in a modern browser, or serve the directory over HTTP (recommended for the Web Audio API).
-3. First load walks through the 3-slide onboarding.
+## Quick start
 
 ```bash
-# optional local server
+git clone https://github.com/MartynJJ/respire.git
+cd respire
 python3 -m http.server 8000
+# open http://localhost:8000
 ```
 
-## How it works
+Or just open `index.html` directly — Web Audio API works best over HTTP.
 
-### Breathwork cycle
-
-Each round runs as a state machine:
+## Breathwork cycle
 
 ```
 countdown (3s) → [inhale → (holdIn) → exhale → (holdOut)] × N cycles
-              → retention (open-ended)
-              → recovery (configurable, default 15s)
+              → retention hold (open-ended, tap to finish)
+              → recovery (default 15s)
               → next round, or done
 ```
 
-Holds with duration `0` are skipped automatically.
+Phases with duration `0` are skipped.
 
-### Audio cues
+## Audio
 
-Generated with Web Audio API oscillators:
+Tones generated with the Web Audio API:
 
-| Phase            | Frequency | Type   |
-|------------------|-----------|--------|
-| Inhale           | 220 Hz    | sine   |
-| Exhale           | 330 Hz    | sine   |
-| Hold (in / out)  | 110 Hz    | sine   |
-| End of cycles    | 330 Hz    | sine   |
-| Recovery start   | 440 Hz    | sine   |
-| Round/end chime  | 660 + 990 | sine   |
-| Countdown end    | 880 Hz    | square |
+| Phase           | Frequency  | Waveform |
+|-----------------|------------|----------|
+| Inhale          | 220 Hz     | sine     |
+| Exhale          | 330 Hz     | sine     |
+| Hold (in/out)   | 110 Hz     | sine     |
+| Recovery        | 440 Hz     | sine     |
+| Round/end chime | 660 + 990  | sine     |
+| Countdown       | 880 Hz     | square   |
 
-Toggle in Settings → **Sound**.
+Voice guidance (Settings → Voice) announces each phase name via the Web Speech API.
 
-### Haptics
+## localStorage keys
 
-Short `navigator.vibrate` pulses on inhale/exhale, longer patterns at retention start, recovery, and session end. Toggle in Settings → **Haptics**.
+| Key                       | Value                                                           |
+|---------------------------|-----------------------------------------------------------------|
+| `respire_breath`          | `{ rounds, cycles, inhale, holdIn, exhale, holdOut, recovery }` |
+| `respire_med`             | `{ duration, bell, interval }`                                  |
+| `respire_tweaks`          | `{ dark, sound, haptics, vocal, voiceGender }`                  |
+| `respire_history`         | `[{ kind, date, … }]`                                           |
+| `respire_onboarding_done` | `"true"` after first run                                        |
 
-## Persistence (localStorage)
-
-| Key                          | Contents                                           |
-|------------------------------|----------------------------------------------------|
-| `respire_breath`             | `{ rounds, cycles, inhale, holdIn, exhale, holdOut, recovery }` |
-| `respire_med`                | `{ duration, bell, interval }`                     |
-| `respire_tweaks`             | `{ dark, sound, haptics }`                         |
-| `respire_history`            | `[{ kind, date, ... }]`                            |
-| `respire_onboarding_done`    | `"true"` once finished                             |
-
-On first load, any legacy `respire_sessions` data is migrated into `respire_history` with `kind: "breath"`.
-
-## Browser compatibility
-
-Modern Chromium / Firefox / Safari. Uses Web Audio API and `navigator.vibrate` (vibration is no-op where unsupported).
+Legacy `respire_sessions` data is migrated into `respire_history` on first load.
 
 ## Project structure
 
 ```
-index.html   — minimal shell, mounts #app-shell
-style.css    — design system (warm cream/coral, orb, sheet, tab bar)
-app.js       — vanilla port of the React design (scene router + session FSM)
+index.html   — app shell
+style.css    — design system (tokens, orb, sheet, tab bar)
+app.js       — scene router + session FSM
 ```
 
 ## License
