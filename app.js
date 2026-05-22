@@ -33,6 +33,8 @@ const DEFAULT_TWEAKS = {
   dark: false,
   sound: true,
   haptics: true,
+  vocal: false,
+  voiceGender: 'female',
 };
 
 const PRESETS = [
@@ -104,6 +106,7 @@ const ICON_PATHS = {
   check:    '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   trash:    '<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/>',
   hapt:     '<rect x="7" y="3" width="10" height="18" rx="2"/><path d="M12 18h.01"/><path d="M3 8c1 1 1 7 0 8"/><path d="M21 8c-1 1-1 7 0 8"/>',
+  voice:    '<path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z"/><path d="M19 10a7 7 0 0 1-14 0"/><line x1="12" y1="19" x2="12" y2="22"/>',
 };
 
 // ───────── Math / format ─────────
@@ -166,6 +169,36 @@ const audio = {
       case 'recovery':this.tone(440, 0.35, 'sine', 0.06); break;
       case 'countdown':this.tone(880, 0.09, 'square', 0.04); break;
     }
+  },
+
+  // Voice guidance
+  _voices: [],
+  initVoices() {
+    const ss = window.speechSynthesis;
+    if (!ss) return;
+    const load = () => { this._voices = ss.getVoices(); };
+    load();
+    ss.onvoiceschanged = load;
+  },
+  _pickVoice(gender) {
+    if (!this._voices.length) return null;
+    const femaleHints = /zira|samantha|victoria|karen|moira|fiona|tessa|anna|kate|susan|alice|amelie|ioana|female/i;
+    const maleHints   = /david|mark|daniel|alex|jorge|rishi|male/i;
+    const hints = gender === 'female' ? femaleHints : maleHints;
+    return this._voices.find(v => hints.test(v.name)) || this._voices[0];
+  },
+  speak(text) {
+    if (!state.tweaks.vocal) return;
+    const ss = window.speechSynthesis;
+    if (!ss) return;
+    ss.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.88;
+    u.pitch = state.tweaks.voiceGender === 'female' ? 1.1 : 0.8;
+    u.volume = 0.9;
+    const v = this._pickVoice(state.tweaks.voiceGender);
+    if (v) u.voice = v;
+    ss.speak(u);
   },
 };
 
@@ -744,7 +777,26 @@ function settingsView() {
       row('bell', 'Sound', 'Chimes on phase transitions & bell',
         t.sound, (v) => { state.tweaks.sound = v; saveTweaks(); render(); }),
       row('hapt', 'Haptics', 'Buzz at each inhale, exhale, and hold',
-        t.haptics, (v) => { state.tweaks.haptics = v; saveTweaks(); render(); })
+        t.haptics, (v) => { state.tweaks.haptics = v; saveTweaks(); render(); }),
+      row('voice', 'Voice guidance', 'Announces inhale, exhale, hold, recovery',
+        t.vocal, (v) => { state.tweaks.vocal = v; saveTweaks(); render(); }),
+      t.vocal
+        ? h('div', null,
+            h('div', { className: 'divider', style: { margin: '10px 0' } }),
+            h('div', { className: 'row', style: { justifyContent: 'space-between', padding: '4px 0 8px' } },
+              h('span', { style: { fontSize: '14px', fontWeight: '500' } }, 'Voice'),
+              h('div', { className: 'pill-options', style: { gap: '6px' } },
+                ['female', 'male'].map(g =>
+                  h('button', {
+                    'aria-selected': t.voiceGender === g ? 'true' : 'false',
+                    onclick: () => { state.tweaks.voiceGender = g; saveTweaks(); render(); },
+                    style: { padding: '6px 14px', fontSize: '13px' },
+                  }, g === 'female' ? 'Female' : 'Male')
+                )
+              )
+            )
+          )
+        : null
     ),
 
     h('div', { className: 'card', style: { marginTop: '14px' } },
@@ -975,6 +1027,13 @@ class BreathSession {
       inhale: 15, exhale: 15, holdIn: 8, holdOut: 8, recovery: [30, 60, 30],
     };
     if (PHASE_HAPTIC[p]) haptic(PHASE_HAPTIC[p]);
+    const PHASE_SPEECH = {
+      inhale: 'Inhale', exhale: 'Exhale',
+      holdIn: 'Hold', holdOut: 'Hold',
+      retention: 'Hold your breath',
+      recovery: 'Recovery',
+    };
+    if (PHASE_SPEECH[p]) audio.speak(PHASE_SPEECH[p]);
   }
 
   nextCycle() {
@@ -1423,6 +1482,7 @@ function boot() {
   state.tweaks  = loadJSON(KEYS.tweaks, DEFAULT_TWEAKS);
   state.history = loadHistory();
   applyTheme();
+  audio.initVoices();
 
   const done = localStorage.getItem(KEYS.onboarding) === 'true';
   state.screen = done ? 'main' : 'onboarding';
