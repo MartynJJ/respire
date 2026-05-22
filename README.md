@@ -6,7 +6,7 @@ A browser-based breathing and meditation app. Warm cream + coral aesthetic, thre
 
 - **Breathwork** — Round-by-round cycles with a 3-second countdown, eased orb animation, mid-cycle holds, open-ended retention hold, and timed recovery.
 - **Meditation timer** — Preset durations (5/10/15/20/30 min) or a custom 1–90 min slider. Optional interval bell.
-- **Presets** — Wim Hof, Box 4-4-4-4, 4-7-8, Tummo. Fully customisable: cycles per round, inhale/hold/exhale/hold timings, recovery length.
+- **Presets** — Power Breath, Box 4-4-4-4, 4-7-8, Tummo. Fully customisable: cycles per round, inhale/hold/exhale/hold timings, recovery length.
 - **History** — Sessions stored in localStorage. Stats card (total sessions, total time, best hold) and per-session rows.
 - **Settings** — Dark mode, sound chimes, haptic feedback, voice guidance (Web Speech API).
 - **Zero dependencies** — Plain HTML/CSS/JS. Geist loaded from Google Fonts.
