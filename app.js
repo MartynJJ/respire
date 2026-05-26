@@ -2,6 +2,8 @@
 
 // ───────── Constants ─────────
 
+const VERSION = '1.0.0';
+
 const KEYS = {
   breath: 'respire_breath',
   med: 'respire_med',
@@ -863,7 +865,9 @@ function settingsView() {
     ),
 
     h('p', { className: 'caption', style: { textAlign: 'center', marginTop: '20px', padding: '0 24px' } },
-      'Consult a doctor before practicing if you have heart, lung, or pregnancy conditions.')
+      'Consult a doctor before practicing if you have heart, lung, or pregnancy conditions.'),
+    h('p', { className: 'caption', style: { textAlign: 'center', marginTop: '8px', opacity: '0.45' } },
+      `v${VERSION}`)
   );
 }
 
