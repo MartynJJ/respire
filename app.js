@@ -155,8 +155,10 @@ const audio = {
     o.stop(c.currentTime + dur);
   },
   chime() {
-    this.tone(660, 0.55, 'sine', 0.08);
-    setTimeout(() => this.tone(990, 0.45, 'sine', 0.05), 60);
+    // Prayer-bowl sound: low fundamental + inharmonic partials, long resonant decay
+    this.tone(432, 3.0, 'sine', 0.13);
+    setTimeout(() => this.tone(1190, 2.4, 'sine', 0.045), 8);
+    setTimeout(() => this.tone(2334, 1.8, 'sine', 0.018), 15);
   },
   phaseTone(phase) {
     switch (phase) {
