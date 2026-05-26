@@ -633,10 +633,11 @@ function medHomeView() {
   const m = state.med;
   const presets = [5, 10, 15, 20, 30];
 
-  // DOM refs updated in-place by the duration slider so scrolling isn't disrupted
+  // DOM refs updated in-place by sliders so scrolling isn't disrupted
   const durTitle = h('span', { style: { color: 'var(--coral)' } },
     `Stay ${m.duration} ${m.duration === 1 ? 'minute' : 'minutes'}.`);
   const durLabel = h('span', { className: 'numeric', style: { fontSize: '14px', fontWeight: '600' } }, `${m.duration}m`);
+  const intervalLabel = h('span', { style: { fontSize: '13px', color: 'var(--ink-soft)' } }, `Chime every ${m.interval}s`);
   let pillBtns = [];
 
   const onDurationChange = (v) => {
@@ -688,7 +689,7 @@ function medHomeView() {
       h('div', { className: 'row', style: { justifyContent: 'space-between' } },
         h('div', { className: 'col', style: { gap: '2px' } },
           h('span', { className: 'eyebrow' }, 'Interval bell'),
-          h('span', { style: { fontSize: '13px', color: 'var(--ink-soft)' } }, `Chime every ${m.interval}s`)
+          intervalLabel,
         ),
         switchEl(m.bell, (v) => { state.med.bell = v; saveMed(); render(); })
       ),
@@ -696,7 +697,7 @@ function medHomeView() {
         ? h('div', null,
             h('div', { className: 'divider', style: { margin: '14px 0' } }),
             slider('Bell every', m.interval, 15, 300, 15, 's',
-              (v) => { state.med.interval = v; saveMed(); render(); })
+              (v) => { state.med.interval = v; saveMed(); intervalLabel.textContent = `Chime every ${v}s`; })
           )
         : null
     ),
