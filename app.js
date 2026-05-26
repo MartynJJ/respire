@@ -160,10 +160,27 @@ const audio = {
     setTimeout(() => this.tone(1190, 2.4, 'sine', 0.045), 8);
     setTimeout(() => this.tone(2334, 1.8, 'sine', 0.018), 15);
   },
+  sweep(freqFrom, freqTo, dur, type = 'sine', gain = 0.06) {
+    if (!state.tweaks.sound) return;
+    const c = this.ensure();
+    if (!c) return;
+    if (c.state === 'suspended') c.resume();
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freqFrom, c.currentTime);
+    o.frequency.linearRampToValueAtTime(freqTo, c.currentTime + dur);
+    g.gain.value = 0;
+    g.gain.linearRampToValueAtTime(gain, c.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
+    o.connect(g).connect(c.destination);
+    o.start();
+    o.stop(c.currentTime + dur);
+  },
   phaseTone(phase) {
     switch (phase) {
-      case 'inhale':  this.tone(220, 0.18, 'sine', 0.05); break;
-      case 'exhale':  this.tone(330, 0.18, 'sine', 0.05); break;
+      case 'inhale':  this.sweep(220, 440, 0.28, 'sine', 0.06); break;
+      case 'exhale':  this.sweep(400, 200, 0.32, 'sine', 0.06); break;
       case 'holdIn':
       case 'holdOut': this.tone(110, 0.24, 'sine', 0.06); break;
       case 'recovery':this.tone(440, 0.35, 'sine', 0.06); break;
@@ -1042,7 +1059,7 @@ class BreathSession {
     };
     if (PHASE_HAPTIC[p]) haptic(PHASE_HAPTIC[p]);
     const PHASE_SPEECH = {
-      inhale: 'Inhale', exhale: 'Exhale',
+      inhale: 'Breathe in', exhale: 'And out',
       holdIn: 'Hold', holdOut: 'Hold',
       retention: 'Hold your breath',
       recovery: 'Recovery',
