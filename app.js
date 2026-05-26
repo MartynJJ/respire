@@ -945,17 +945,21 @@ function buildOrbDOM() {
   const subBot = h('div', { className: 'orb-sub-bot' }, ' ');
   wrap.append(labelTop, orbWrap, subBot);
 
+  // Cache refs once — avoids querySelector on every draw call
+  const timeOverlay = orbWrap.querySelector('.orb-time-overlay');
+  const rings = [...orbWrap.querySelectorAll('.orb-ring')];
+  const r3 = orbWrap.querySelector('.orb-ring.r3');
+
   return {
     root: wrap,
     setLabel: (txt) => { labelTop.textContent = txt || ' '; },
     setSub: (txt) => { subBot.textContent = txt || ' '; },
-    setTime: (txt) => { orbWrap.querySelector('.orb-time-overlay').textContent = txt || ''; },
+    setTime: (txt) => { timeOverlay.textContent = txt || ''; },
     setScale: (s) => {
       const v = 0.45 + Math.max(0, Math.min(1, s)) * 0.55;
-      orbWrap.querySelectorAll('.orb-ring').forEach(el => el.style.transform = `scale(${v})`);
+      rings.forEach(el => el.style.transform = `scale(${v})`);
     },
     setDimmed: (b) => {
-      const r3 = orbWrap.querySelector('.orb-ring.r3');
       if (b) r3.classList.add('dimmed'); else r3.classList.remove('dimmed');
     },
   };
@@ -987,6 +991,8 @@ class BreathSession {
     this.total = 0;
     this.rafId = null;
     this.exited = false;
+    this._drawn = {};
+    this._actionsKey = null;
   }
 
   mount() {
@@ -1069,7 +1075,7 @@ class BreathSession {
       retention: 'Hold your breath',
       recovery: 'Recovery',
     };
-    if (PHASE_SPEECH[p]) audio.speak(PHASE_SPEECH[p]);
+    if (PHASE_SPEECH[p] && (this.dur[p] ?? Infinity) >= 2) audio.speak(PHASE_SPEECH[p]);
   }
 
   nextCycle() {
@@ -1182,10 +1188,11 @@ class BreathSession {
     }
 
     this.orb.setScale(scale);
-    this.orb.setLabel(label);
-    this.orb.setTime(time);
-    this.orb.setSub(sub);
-    this.orb.setDimmed(dim);
+    const d = this._drawn;
+    if (label !== d.label) { this.orb.setLabel(label); d.label = label; }
+    if (time  !== d.time)  { this.orb.setTime(time);   d.time  = time;  }
+    if (sub   !== d.sub)   { this.orb.setSub(sub);     d.sub   = sub;   }
+    if (dim   !== d.dim)   { this.orb.setDimmed(dim);  d.dim   = dim;   }
   }
 
   updateCounter() {
@@ -1197,6 +1204,12 @@ class BreathSession {
   }
 
   renderActions() {
+    const key = this.phase === 'retention'
+      ? `retention-${this.retentions.length}`
+      : (this.paused ? 'paused' : 'active');
+    if (key === this._actionsKey) return;
+    this._actionsKey = key;
+
     clearKids(this.actions);
     if (this.phase === 'retention') {
       this.actions.append(
