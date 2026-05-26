@@ -389,6 +389,7 @@ body {
   background: var(--line-strong);
   border-radius: 999px;
   outline: none;
+  touch-action: none;
 }
 .range::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
