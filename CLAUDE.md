@@ -29,6 +29,10 @@ google-chrome --headless=new --no-sandbox --disable-gpu \
   | grep -q 'data-theme' && echo 'PASS' || echo 'FAIL: JS did not initialise'
 ```
 
+## Versioning
+
+`const VERSION` in `app.js` is auto-bumped by the `bump-version` GitHub Actions workflow on every merge to master. The patch number equals the commit count on master (`git rev-list --count HEAD`). Do not edit `VERSION` manually.
+
 ## Deployment
 
 The site is served via **GitHub Pages** from the `master` branch root.  
