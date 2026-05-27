@@ -967,6 +967,14 @@ function buildOrbDOM() {
 
 // ───────── Breath session ─────────
 
+const PHASE_HAPTIC = { inhale: 15, exhale: 15, holdIn: 8, holdOut: 8, recovery: [30, 60, 30] };
+const PHASE_SPEECH = {
+  inhale: 'Breathe in', exhale: 'And out',
+  holdIn: 'Hold', holdOut: 'Hold',
+  retention: 'Hold your breath',
+  recovery: 'Recovery',
+};
+
 class BreathSession {
   constructor(settings) {
     this.s = settings;
@@ -993,6 +1001,8 @@ class BreathSession {
     this.exited = false;
     this._drawn = {};
     this._actionsKey = null;
+    this._retFloor = -1;
+    this._retTime = '';
   }
 
   mount() {
@@ -1065,16 +1075,7 @@ class BreathSession {
     this.renderActions();
     this.updateCounter();
     audio.phaseTone(p);
-    const PHASE_HAPTIC = {
-      inhale: 15, exhale: 15, holdIn: 8, holdOut: 8, recovery: [30, 60, 30],
-    };
     if (PHASE_HAPTIC[p]) haptic(PHASE_HAPTIC[p]);
-    const PHASE_SPEECH = {
-      inhale: 'Breathe in', exhale: 'And out',
-      holdIn: 'Hold', holdOut: 'Hold',
-      retention: 'Hold your breath',
-      recovery: 'Recovery',
-    };
     if (PHASE_SPEECH[p]) audio.speak(PHASE_SPEECH[p]);
   }
 
@@ -1175,11 +1176,15 @@ class BreathSession {
         scale = 0; label = 'Hold'; time = String(Math.ceil(remaining)); dim = true;
         sub = this.paused ? 'Paused — tap play to resume' : '';
         break;
-      case 'retention':
+      case 'retention': {
         scale = 0.15 + 0.05 * Math.sin(this.t * 0.6);
-        label = 'Retention'; time = fmtTime(this.t);
+        label = 'Retention';
+        const flr = Math.floor(this.t);
+        if (flr !== this._retFloor) { this._retFloor = flr; this._retTime = fmtTime(this.t); }
+        time = this._retTime;
         sub = 'Tap done when ready';
         break;
+      }
       case 'recovery':
         scale = easeInOutSine(Math.min(1, this.t / 2));
         label = 'Recovery'; time = String(Math.ceil(d - this.t));
@@ -1268,6 +1273,7 @@ class MedSession {
     this.t = 0;
     this.rafId = null;
     this.exited = false;
+    this._drawn = {};
   }
 
   mount() {
@@ -1334,11 +1340,14 @@ class MedSession {
 
       const scale = 0.45 + 0.15 * Math.sin(((now / 1000) % 8) * Math.PI / 4);
       this.orb.setScale(Math.max(0, Math.min(1, scale)));
-      this.orb.setLabel('Settle');
-      this.orb.setTime(fmtTime(remaining));
-      this.orb.setSub(this.intervalBell
+      const dr = this._drawn;
+      if (!dr.label) { this.orb.setLabel('Settle'); dr.label = 'Settle'; }
+      const timeStr = fmtTime(remaining);
+      if (timeStr !== dr.time) { this.orb.setTime(timeStr); dr.time = timeStr; }
+      const subStr = this.intervalBell
         ? `Next bell in ${fmtTime(Math.max(0, this.intervalSeconds - (this.t - this.lastBell)))}`
-        : 'Eyes soft · breath natural');
+        : 'Eyes soft · breath natural';
+      if (subStr !== dr.sub) { this.orb.setSub(subStr); dr.sub = subStr; }
 
       if (remaining <= 0) {
         audio.chime();
