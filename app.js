@@ -209,14 +209,14 @@ const audio = {
     if (!state.tweaks.vocal) return;
     const ss = window.speechSynthesis;
     if (!ss) return;
-    ss.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 0.88;
     u.pitch = state.tweaks.voiceGender === 'female' ? 1.1 : 0.8;
     u.volume = 0.9;
     const v = this._pickVoice(state.tweaks.voiceGender);
     if (v) u.voice = v;
-    ss.speak(u);
+    ss.cancel();
+    setTimeout(() => ss.speak(u), 50);
   },
 };
 
@@ -1075,7 +1075,7 @@ class BreathSession {
       retention: 'Hold your breath',
       recovery: 'Recovery',
     };
-    if (PHASE_SPEECH[p] && (this.dur[p] ?? Infinity) >= 2) audio.speak(PHASE_SPEECH[p]);
+    if (PHASE_SPEECH[p]) audio.speak(PHASE_SPEECH[p]);
   }
 
   nextCycle() {
