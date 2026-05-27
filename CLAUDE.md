@@ -29,6 +29,10 @@ google-chrome --headless=new --no-sandbox --disable-gpu \
   | grep -q 'data-theme' && echo 'PASS' || echo 'FAIL: JS did not initialise'
 ```
 
+## Versioning
+
+ in  is auto-bumped by the  GitHub Actions workflow on every merge to master. The patch number equals the commit count on master (). Do not edit  manually.
+
 ## Deployment
 
 The site is served via **GitHub Pages** from the `master` branch root.  

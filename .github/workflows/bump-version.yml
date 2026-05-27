@@ -1,0 +1,38 @@
+name: Bump version
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  bump:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute and write version
+        run: |
+          COUNT=$(git rev-list --count HEAD)
+          VERSION="1.0.$COUNT"
+          CURRENT=$(grep -oP "(?<=const VERSION = ')[^']+" app.js)
+          if [ "$CURRENT" = "$VERSION" ]; then
+            echo "Already at $VERSION — nothing to do"
+            exit 0
+          fi
+          sed -i "s/const VERSION = '[^']*'/const VERSION = '$VERSION'/" app.js
+          echo "Bumped $CURRENT → $VERSION"
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --quiet app.js || (
+            git add app.js &&
+            git commit -m "Bump version to $(grep -oP \"(?<=const VERSION = ')[^']+\" app.js) [skip ci]" &&
+            git push
+          )
