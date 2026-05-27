@@ -1188,11 +1188,11 @@ class BreathSession {
     }
 
     this.orb.setScale(scale);
-    const d = this._drawn;
-    if (label !== d.label) { this.orb.setLabel(label); d.label = label; }
-    if (time  !== d.time)  { this.orb.setTime(time);   d.time  = time;  }
-    if (sub   !== d.sub)   { this.orb.setSub(sub);     d.sub   = sub;   }
-    if (dim   !== d.dim)   { this.orb.setDimmed(dim);  d.dim   = dim;   }
+    const last = this._drawn;
+    if (label !== last.label) { this.orb.setLabel(label); last.label = label; }
+    if (time  !== last.time)  { this.orb.setTime(time);   last.time  = time;  }
+    if (sub   !== last.sub)   { this.orb.setSub(sub);     last.sub   = sub;   }
+    if (dim   !== last.dim)   { this.orb.setDimmed(dim);  last.dim   = dim;   }
   }
 
   updateCounter() {
