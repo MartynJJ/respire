@@ -32,8 +32,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git diff --quiet app.js || (
-            git add app.js &&
-            git commit -m "Bump version to $(grep -oP \"(?<=const VERSION = ')[^']+\" app.js) [skip ci]" &&
+          if ! git diff --quiet app.js; then
+            NEW_VER=$(grep -oP "(?<=const VERSION = ')[^']+" app.js)
+            git add app.js
+            git commit -m "Bump version to $NEW_VER [skip ci]"
             git push
-          )
+          fi
