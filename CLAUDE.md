@@ -31,7 +31,7 @@ google-chrome --headless=new --no-sandbox --disable-gpu \
 
 ## Versioning
 
- in  is auto-bumped by the  GitHub Actions workflow on every merge to master. The patch number equals the commit count on master (). Do not edit  manually.
+`const VERSION` in `app.js` is auto-bumped by the `bump-version` GitHub Actions workflow on every merge to master. The patch number equals the commit count on master (`git rev-list --count HEAD`). Do not edit `VERSION` manually.
 
 ## Deployment
 
