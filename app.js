@@ -130,10 +130,12 @@ function todayLabel() {
 
 const audio = {
   ctx: null,
+  _clips: {},    // gender-key → AudioBuffer, ready to play
+  _pending: {},  // gender-key → ArrayBuffer, fetched but not yet decoded
   ensure() {
     if (this.ctx) return this.ctx;
     const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (Ctx) this.ctx = new Ctx();
+    if (Ctx) { this.ctx = new Ctx(); this._decodeClips(); }
     return this.ctx;
   },
   resume() {
@@ -190,6 +192,45 @@ const audio = {
     }
   },
 
+  loadClips() {
+    const keys = ['breathe-in', 'and-out', 'hold', 'hold-breath', 'recovery'];
+    for (const gender of ['female', 'male']) {
+      for (const k of keys) {
+        const name = `${gender}-${k}`;
+        fetch(`audio/${name}.mp3`)
+          .then(r => r.arrayBuffer())
+          .then(buf => {
+            if (this.ctx) {
+              this.ctx.decodeAudioData(buf).then(d => { this._clips[name] = d; }).catch(() => {});
+            } else {
+              this._pending[name] = buf;
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  },
+  _decodeClips() {
+    const c = this.ctx;
+    if (!c) return;
+    for (const [name, buf] of Object.entries(this._pending)) {
+      c.decodeAudioData(buf).then(d => { this._clips[name] = d; }).catch(() => {});
+    }
+    this._pending = {};
+  },
+  _playClip(name) {
+    const c = this.ctx;
+    const buf = this._clips[name];
+    if (!c || !buf) return false;
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const g = c.createGain();
+    g.gain.value = 0.85;
+    src.connect(g).connect(c.destination);
+    src.start();
+    return true;
+  },
+
   _voices: [],
   initVoices() {
     const ss = window.speechSynthesis;
@@ -207,6 +248,19 @@ const audio = {
   },
   speak(text) {
     if (!state.tweaks.vocal) return;
+    const CLIP_MAP = {
+      'Breathe in':       'breathe-in',
+      'And out':          'and-out',
+      'Hold':             'hold',
+      'Hold your breath': 'hold-breath',
+      'Recovery':         'recovery',
+    };
+    const k = CLIP_MAP[text];
+    if (k) {
+      const gender = state.tweaks.voiceGender === 'male' ? 'male' : 'female';
+      if (this._playClip(`${gender}-${k}`)) return;
+    }
+    // Fallback: speechSynthesis (used before clips load, or offline first-visit)
     const ss = window.speechSynthesis;
     if (!ss) return;
     const u = new SpeechSynthesisUtterance(text);
@@ -1541,6 +1595,7 @@ function boot() {
   state.history = loadHistory();
   applyTheme();
   audio.initVoices();
+  audio.loadClips();
 
   const done = localStorage.getItem(KEYS.onboarding) === 'true';
   state.screen = done ? 'main' : 'onboarding';
