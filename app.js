@@ -2,7 +2,7 @@
 
 // ───────── Constants ─────────
 
-const VERSION = '1.0.51';
+const VERSION = '1.0.52';
 
 const KEYS = {
   breath: 'respire_breath',
@@ -278,6 +278,32 @@ function haptic(pattern) {
   if (!state.tweaks.haptics) return;
   try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {}
 }
+
+// ───────── Wake Lock ─────────
+
+const wakeLock = {
+  _sentinel: null,
+  _onVisible: null,
+  async acquire() {
+    if (!navigator.wakeLock) return;
+    try {
+      this._sentinel = await navigator.wakeLock.request('screen');
+      this._sentinel.addEventListener('release', () => { this._sentinel = null; });
+    } catch (e) {}
+    // Re-acquire if the OS releases it when tab becomes visible again
+    if (!this._onVisible) {
+      this._onVisible = () => { if (document.visibilityState === 'visible') this.acquire(); };
+      document.addEventListener('visibilitychange', this._onVisible);
+    }
+  },
+  release() {
+    if (this._sentinel) { this._sentinel.release(); this._sentinel = null; }
+    if (this._onVisible) {
+      document.removeEventListener('visibilitychange', this._onVisible);
+      this._onVisible = null;
+    }
+  },
+};
 
 // ───────── Persistence ─────────
 
@@ -1091,12 +1117,14 @@ class BreathSession {
     this.updateCounter();
     this.loop = this.loop.bind(this);
     this.rafId = requestAnimationFrame(this.loop);
+    wakeLock.acquire();
     return root;
   }
 
   unmount() {
     this.exited = true;
     if (this.rafId) cancelAnimationFrame(this.rafId);
+    wakeLock.release();
   }
 
   loop(now) {
@@ -1387,12 +1415,14 @@ class MedSession {
     this.root = root;
     this.loop = this.loop.bind(this);
     this.rafId = requestAnimationFrame(this.loop);
+    wakeLock.acquire();
     return root;
   }
 
   unmount() {
     this.exited = true;
     if (this.rafId) cancelAnimationFrame(this.rafId);
+    wakeLock.release();
   }
 
   togglePause() {
