@@ -270,7 +270,7 @@ const audio = {
     const v = this._pickVoice(state.tweaks.voiceGender);
     if (v) u.voice = v;
     ss.cancel();
-    setTimeout(() => ss.speak(u), 50);
+    setTimeout(() => ss.speak(u), 20);
   },
 };
 
@@ -1057,6 +1057,7 @@ class BreathSession {
     this._actionsKey = null;
     this._retFloor = -1;
     this._retTime = '';
+    this._cueFired = false;
   }
 
   mount() {
@@ -1125,12 +1126,14 @@ class BreathSession {
     this.startTime = performance.now();
     this.pauseAcc = 0;
     this.t = 0;
+    this._cueFired = false;
     this.phase = p;
-    this.renderActions();
-    this.updateCounter();
     audio.phaseTone(p);
     if (PHASE_HAPTIC[p]) haptic(PHASE_HAPTIC[p]);
-    if (PHASE_SPEECH[p]) audio.speak(PHASE_SPEECH[p]);
+    // Speech for retention/recovery fires immediately (user-triggered, no prior phase to pre-cue from)
+    if ((p === 'retention' || p === 'recovery') && PHASE_SPEECH[p]) audio.speak(PHASE_SPEECH[p]);
+    this.renderActions();
+    this.updateCounter();
   }
 
   nextCycle() {
@@ -1142,9 +1145,35 @@ class BreathSession {
     }
   }
 
+  _nextPhaseSpeech() {
+    switch (this.phase) {
+      case 'countdown': return PHASE_SPEECH['inhale'];
+      case 'inhale':    return this.s.holdIn > 0 ? PHASE_SPEECH['holdIn'] : PHASE_SPEECH['exhale'];
+      case 'holdIn':    return PHASE_SPEECH['exhale'];
+      case 'exhale':
+        if (this.s.holdOut > 0) return PHASE_SPEECH['holdOut'];
+        return this.cycle < this.s.cycles ? PHASE_SPEECH['inhale'] : PHASE_SPEECH['retention'];
+      case 'holdOut':
+        return this.cycle < this.s.cycles ? PHASE_SPEECH['inhale'] : PHASE_SPEECH['retention'];
+      case 'recovery':
+        return this.round < this.s.rounds ? PHASE_SPEECH['inhale'] : null;
+      default: return null;
+    }
+  }
+
   advance() {
     if (this.phase === 'retention' || this.phase === 'done') return;
     const d = this.dur[this.phase];
+
+    // Pre-fire speech cue slightly before the phase transition so it lands on time
+    if (!this._cueFired) {
+      const cue = this._nextPhaseSpeech();
+      if (cue && (d - this.t) <= 0.3) {
+        audio.speak(cue);
+        this._cueFired = true;
+      }
+    }
+
     if (this.t < d) return;
     switch (this.phase) {
       case 'countdown':
