@@ -2,7 +2,7 @@
 
 // ───────── Constants ─────────
 
-const VERSION = '1.0.52';
+const VERSION = '1.0.53';
 
 const KEYS = {
   breath: 'respire_breath',
@@ -218,12 +218,13 @@ const audio = {
     }
     this._pending = {};
   },
-  _playClip(name) {
+  _playClip(name, rate = 1) {
     const c = this.ctx;
     const buf = this._clips[name];
     if (!c || !buf) return false;
     const src = c.createBufferSource();
     src.buffer = buf;
+    src.playbackRate.value = rate;
     const g = c.createGain();
     g.gain.value = 0.85;
     src.connect(g).connect(c.destination);
@@ -246,7 +247,7 @@ const audio = {
     const hints = gender === 'female' ? femaleHints : maleHints;
     return this._voices.find(v => hints.test(v.name)) || this._voices[0];
   },
-  speak(text) {
+  speak(text, rate = 1) {
     if (!state.tweaks.vocal) return;
     const CLIP_MAP = {
       'Breathe in':       'breathe-in',
@@ -258,13 +259,13 @@ const audio = {
     const k = CLIP_MAP[text];
     if (k) {
       const gender = state.tweaks.voiceGender === 'male' ? 'male' : 'female';
-      if (this._playClip(`${gender}-${k}`)) return;
+      if (this._playClip(`${gender}-${k}`, rate)) return;
     }
     // Fallback: speechSynthesis (used before clips load, or offline first-visit)
     const ss = window.speechSynthesis;
     if (!ss) return;
     const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.88;
+    u.rate = 0.88 * rate;
     u.pitch = state.tweaks.voiceGender === 'female' ? 1.1 : 0.8;
     u.volume = 0.9;
     const v = this._pickVoice(state.tweaks.voiceGender);
@@ -1197,7 +1198,9 @@ class BreathSession {
     if (!this._cueFired) {
       const cue = this._nextPhaseSpeech();
       if (cue && (d - this.t) <= 0.3) {
-        audio.speak(cue);
+        // Speed up clips for short phases so the word fits before the next phase
+        const rate = d < 2 ? Math.min(3, 1.5 / d) : 1;
+        audio.speak(cue, rate);
         this._cueFired = true;
       }
     }
