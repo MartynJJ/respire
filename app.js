@@ -2,7 +2,7 @@
 
 // ───────── Constants ─────────
 
-const VERSION = '1.0.52';
+const VERSION = '1.0.53';
 
 const KEYS = {
   breath: 'respire_breath',
