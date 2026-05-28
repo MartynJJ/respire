@@ -2,7 +2,7 @@
 
 // ───────── Constants ─────────
 
-const VERSION = '1.0.57';
+const VERSION = '1.0.58';
 
 const KEYS = {
   breath: 'respire_breath',
@@ -285,16 +285,21 @@ function haptic(pattern) {
 const wakeLock = {
   _sentinel: null,
   _onVisible: null,
+  _noSleep: null,   // NoSleep instance used when Wake Lock API is absent
+  _useNative() { return !!navigator.wakeLock; },
   async acquire() {
-    if (!navigator.wakeLock) return;
-    try {
-      this._sentinel = await navigator.wakeLock.request('screen');
-      this._sentinel.addEventListener('release', () => { this._sentinel = null; });
-    } catch (e) {}
-    // Re-acquire if the OS releases it when tab becomes visible again
-    if (!this._onVisible) {
-      this._onVisible = () => { if (document.visibilityState === 'visible') this.acquire(); };
-      document.addEventListener('visibilitychange', this._onVisible);
+    if (this._useNative()) {
+      try {
+        this._sentinel = await navigator.wakeLock.request('screen');
+        this._sentinel.addEventListener('release', () => { this._sentinel = null; });
+      } catch (e) {}
+      if (!this._onVisible) {
+        this._onVisible = () => { if (document.visibilityState === 'visible') this.acquire(); };
+        document.addEventListener('visibilitychange', this._onVisible);
+      }
+    } else if (typeof NoSleep !== 'undefined') {
+      if (!this._noSleep) this._noSleep = new NoSleep();
+      this._noSleep.enable();
     }
   },
   release() {
@@ -303,6 +308,7 @@ const wakeLock = {
       document.removeEventListener('visibilitychange', this._onVisible);
       this._onVisible = null;
     }
+    if (this._noSleep) { this._noSleep.disable(); }
   },
 };
 
