@@ -9,7 +9,8 @@ A browser-based breathing and meditation app. Warm cream + coral aesthetic, thre
 - **Presets** — Power Breath, Box 4-4-4-4, 4-7-8, Tummo. Fully customisable: cycles per round, inhale/hold/exhale/hold timings, recovery length.
 - **History** — Sessions stored in localStorage. Stats card (total sessions, total time, best hold) and per-session rows.
 - **Settings** — Dark mode, sound chimes, haptic feedback, voice guidance (Web Speech API).
-- **Zero dependencies** — Plain HTML/CSS/JS. Geist loaded from Google Fonts.
+- **Screen stays on** — Screen Wake Lock API, with a NoSleep.js fallback for browsers without it (e.g. Firefox).
+- **No build step** — Plain HTML/CSS/JS. Geist from Google Fonts and NoSleep.js from cdnjs are the only external requests.
 
 ## Quick start
 
@@ -35,18 +36,8 @@ Phases with duration `0` are skipped.
 
 ## Audio
 
-Tones generated with the Web Audio API:
-
-| Phase           | Frequency  | Waveform |
-|-----------------|------------|----------|
-| Inhale          | 220 Hz     | sine     |
-| Exhale          | 330 Hz     | sine     |
-| Hold (in/out)   | 110 Hz     | sine     |
-| Recovery        | 440 Hz     | sine     |
-| Round/end chime | 660 + 990  | sine     |
-| Countdown       | 880 Hz     | square   |
-
-Voice guidance (Settings → Voice) announces each phase name via the Web Speech API.
+- **Phase tones** — Web Audio oscillators: inhale sweeps 220→440 Hz, exhale 400→200 Hz, holds 110 Hz, recovery 440 Hz, plus a three-partial singing-bowl chime at round/session end and for interval bells.
+- **Voice guidance** (Settings → Voice) — pre-recorded clips in `audio/` (`female-*.mp3`, `male-*.mp3`: breathe-in, and-out, hold, hold-breath, recovery), decoded once into `AudioBuffer`s and played with a speed-up on short phases. Falls back to the Web Speech API until clips load.
 
 ## localStorage keys
 
@@ -58,15 +49,22 @@ Voice guidance (Settings → Voice) announces each phase name via the Web Speech
 | `respire_history`         | `[{ kind, date, … }]`                                           |
 | `respire_onboarding_done` | `"true"` after first run                                        |
 
-Legacy `respire_sessions` data is migrated into `respire_history` on first load.
+History entries carry an `at` timestamp (ms since epoch) and are shown as Today / Yesterday / date. Legacy `respire_sessions` data is migrated into `respire_history` on first load.
 
 ## Project structure
 
 ```
-index.html   — app shell
-style.css    — design system (tokens, orb, sheet, tab bar)
-app.js       — scene router + session FSM
+index.html                       — app shell
+style.css                        — design system (tokens, orb, sheet, tab bar)
+app.js                           — scene router, audio/haptics/wake-lock, session state machines
+audio/                           — pre-recorded vocal cue clips
+.github/workflows/bump-version.yml — auto-bumps VERSION in app.js on merge to master
+CLAUDE.md                        — contributor/agent workflow notes
 ```
+
+## Deployment
+
+Served by GitHub Pages from the root of `master`. There is no CI gate, so run `node --check app.js` before merging.
 
 ## License
 

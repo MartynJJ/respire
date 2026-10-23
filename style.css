@@ -168,12 +168,6 @@ body {
   letter-spacing: -0.035em;
   color: var(--ink);
 }
-.title-lg {
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 1.08;
-  letter-spacing: -0.03em;
-}
 .title-md {
   font-size: 20px;
   font-weight: 600;
@@ -449,30 +443,6 @@ body {
   margin: 10px auto 4px;
 }
 
-/* Live indicator dot */
-.dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: var(--coral);
-  display: inline-block;
-}
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.85); }
-}
-.dot.live { animation: pulse-dot 1.6s ease-in-out infinite; }
-
-/* Number display for big timers */
-.big-time {
-  font-family: var(--ff-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: clamp(64px, 18vw, 88px);
-  font-weight: 600;
-  letter-spacing: -0.04em;
-  line-height: 1;
-  color: var(--ink);
-}
-
 /* Scroll area inside scene */
 .scroll {
   flex: 1;
@@ -485,26 +455,6 @@ body {
 }
 .scroll::-webkit-scrollbar { width: 6px; }
 .scroll::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 3px; }
-
-/* Status bar (faux) */
-.statusbar {
-  height: 32px;
-  padding: 0 22px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink);
-  letter-spacing: 0.01em;
-  flex-shrink: 0;
-}
-.statusbar .right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  opacity: 0.85;
-}
 
 /* Header */
 .header {
@@ -592,17 +542,6 @@ body {
 }
 [data-theme="dark"] .viz::before { opacity: 0.4; }
 
-/* Stop btn (square ish) */
-.btn-stop {
-  height: 52px;
-  padding: 0 22px;
-  font-size: 14.5px;
-  border-radius: var(--radius-pill);
-  background: var(--surface-2);
-  color: var(--ink);
-  border: 1px solid var(--line);
-}
-
 /* Toast */
 .toast {
   position: absolute;
@@ -630,13 +569,9 @@ body {
 /* helpers */
 .row { display: flex; align-items: center; gap: 12px; }
 .col { display: flex; flex-direction: column; gap: 8px; }
-.spacer { flex: 1; }
 .center { display: grid; place-items: center; text-align: center; }
-.hidden { display: none !important; }
-.full { width: 100%; }
-.stretch { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
 
-/* Number pad for custom minutes — simple inline use */
+/* Pill option groups (durations, presets, voice) */
 .pill-options {
   display: flex;
   flex-wrap: wrap;
@@ -808,18 +743,6 @@ body {
   z-index: 3;
   pointer-events: none;
 }
-
-/* Phase tag (Inhale / Hold / Exhale) */
-.phase-tag {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: var(--ink-soft);
-}
-.phase-tag.inhale { color: var(--coral); }
-.phase-tag.exhale { color: var(--moss); }
-.phase-tag.hold   { color: var(--ember); }
 
 /* Round counter */
 .rounder {
