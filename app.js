@@ -142,28 +142,6 @@ const audio = {
     const c = this.ensure();
     if (c && c.state === 'suspended') c.resume();
   },
-  tone(freq, dur, type = 'sine', gain = 0.06) {
-    if (!state.tweaks.sound) return;
-    const c = this.ensure();
-    if (!c) return;
-    if (c.state === 'suspended') c.resume();
-    const o = c.createOscillator();
-    const g = c.createGain();
-    o.type = type;
-    o.frequency.value = freq;
-    g.gain.value = 0;
-    g.gain.linearRampToValueAtTime(gain, c.currentTime + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
-    o.connect(g).connect(c.destination);
-    o.start();
-    o.stop(c.currentTime + dur);
-  },
-  chime() {
-    // Prayer-bowl sound: low fundamental + inharmonic partials, long resonant decay
-    this.tone(432, 3.0, 'sine', 0.13);
-    setTimeout(() => this.tone(1190, 2.4, 'sine', 0.045), 8);
-    setTimeout(() => this.tone(2334, 1.8, 'sine', 0.018), 15);
-  },
   sweep(freqFrom, freqTo, dur, type = 'sine', gain = 0.06) {
     if (!state.tweaks.sound) return;
     const c = this.ensure();
@@ -173,7 +151,7 @@ const audio = {
     const g = c.createGain();
     o.type = type;
     o.frequency.setValueAtTime(freqFrom, c.currentTime);
-    o.frequency.linearRampToValueAtTime(freqTo, c.currentTime + dur);
+    if (freqTo !== freqFrom) o.frequency.linearRampToValueAtTime(freqTo, c.currentTime + dur);
     g.gain.value = 0;
     g.gain.linearRampToValueAtTime(gain, c.currentTime + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
@@ -181,14 +159,22 @@ const audio = {
     o.start();
     o.stop(c.currentTime + dur);
   },
+  tone(freq, dur, type = 'sine', gain = 0.06) {
+    this.sweep(freq, freq, dur, type, gain);
+  },
+  chime() {
+    // Prayer-bowl sound: low fundamental + inharmonic partials, long resonant decay
+    this.tone(432, 3.0, 'sine', 0.13);
+    setTimeout(() => this.tone(1190, 2.4, 'sine', 0.045), 8);
+    setTimeout(() => this.tone(2334, 1.8, 'sine', 0.018), 15);
+  },
   phaseTone(phase) {
     switch (phase) {
       case 'inhale':  this.sweep(220, 440, 0.28, 'sine', 0.06); break;
       case 'exhale':  this.sweep(400, 200, 0.32, 'sine', 0.06); break;
       case 'holdIn':
       case 'holdOut': this.tone(110, 0.24, 'sine', 0.06); break;
-      case 'recovery':this.tone(440, 0.35, 'sine', 0.06); break;
-      case 'countdown':this.tone(880, 0.09, 'square', 0.04); break;
+      case 'recovery': this.tone(440, 0.35, 'sine', 0.06); break;
     }
   },
 
@@ -330,7 +316,10 @@ function saveJSON(key, value) {
 function loadHistory() {
   try {
     const cur = localStorage.getItem(KEYS.history);
-    if (cur) return JSON.parse(cur);
+    if (cur) {
+      const arr = JSON.parse(cur);
+      return Array.isArray(arr) ? arr : [];
+    }
   } catch (e) {}
   // Migrate from legacy respire_sessions
   try {
@@ -338,7 +327,7 @@ function loadHistory() {
     if (legacy) {
       const arr = JSON.parse(legacy);
       const migrated = Array.isArray(arr)
-        ? arr.map(s => ({ kind: 'breath', date: s.date || new Date().toISOString(), rounds: s.rounds || 0, best: s.best || 0, total: s.total || 0 }))
+        ? arr.map(s => ({ kind: 'breath', at: Date.parse(s.date) || Date.now(), rounds: s.rounds || 0, best: s.best || 0, total: s.total || 0 }))
         : [];
       saveJSON(KEYS.history, migrated);
       return migrated;
@@ -347,7 +336,7 @@ function loadHistory() {
   return [];
 }
 
-function saveHistory(h) { saveJSON(KEYS.history, h); }
+function saveHistory(list) { saveJSON(KEYS.history, list); }
 function saveBreath()  { saveJSON(KEYS.breath, state.breath); }
 function saveMed()     { saveJSON(KEYS.med, state.med); }
 function saveTweaks()  { saveJSON(KEYS.tweaks, state.tweaks); }
@@ -802,6 +791,24 @@ function medHomeView() {
 
 // ───────── History ─────────
 
+function clearHistory() {
+  if (state.history.length === 0 || !confirm('Clear all history?')) return;
+  state.history = [];
+  saveHistory(state.history);
+  showToast('History cleared');
+  render();
+}
+
+function formatWhen(item) {
+  if (!item.at) return item.date || '';
+  const d = new Date(item.at);
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 864e5);
+  if (days === 0) return `Today · ${time}`;
+  if (days === 1) return `Yesterday · ${time}`;
+  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} · ${time}`;
+}
+
 function historyView() {
   const totalSessions = state.history.length;
   const totalSeconds = state.history.reduce((a, x) => a + (x.total || x.duration || 0), 0);
@@ -827,13 +834,7 @@ function historyView() {
     state.history.length > 0
       ? h('button', {
           className: 'btn btn-text', style: { width: '100%', marginTop: '14px' },
-          onclick: () => {
-            if (confirm('Clear all history?')) {
-              state.history = [];
-              saveHistory(state.history);
-              showToast('History cleared');
-            }
-          },
+          onclick: clearHistory,
         }, icon('trash', 14), 'Clear history')
       : null
   );
@@ -847,11 +848,11 @@ function historyRow(item) {
           icon(item.kind === 'breath' ? 'breath' : 'meditate', 12),
           item.kind === 'breath' ? 'Breathwork' : 'Meditation'
         ),
-        h('span', { className: 'caption' }, item.date)
+        h('span', { className: 'caption' }, formatWhen(item))
       ),
       h('span', { className: 'body', style: { color: 'var(--ink)' } },
         item.kind === 'breath'
-          ? `${item.rounds} rounds · best ${fmtTime(item.best)}`
+          ? `${item.rounds} ${item.rounds === 1 ? 'round' : 'rounds'} · best ${fmtTime(item.best)}`
           : `${Math.round((item.duration || 0) / 60)} min sit`)
     ),
     h('span', { className: 'numeric', style: { fontSize: '13px', color: 'var(--ink-mute)' } },
@@ -928,14 +929,7 @@ function settingsView() {
           h('div', { className: 'meta' }, `${state.history.length} entries stored locally`),
         ),
         h('button', { className: 'btn btn-text', style: { color: 'var(--coral)' },
-          onclick: () => {
-            if (state.history.length === 0) return;
-            if (confirm('Clear all history?')) {
-              state.history = [];
-              saveHistory(state.history);
-              showToast('History cleared');
-            }
-          } }, 'Clear')
+          onclick: clearHistory }, 'Clear')
       ),
       h('div', { className: 'settings-row' },
         h('div', { className: 'col', style: { gap: '2px' } },
@@ -1154,6 +1148,7 @@ class BreathSession {
     }
     clearKids(this.btnPause);
     this.btnPause.append(icon(this.paused ? 'play' : 'pause', 16));
+    this.renderActions();
     this.draw();
   }
 
@@ -1570,17 +1565,12 @@ function retentionChart(retentions) {
 
 // ───────── Result actions ─────────
 
-function dateLabel() {
-  const d = new Date();
-  return 'Today · ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-
 function saveResult() {
   const r = state.result;
   if (r) {
     const entry = r.kind === 'breath'
-      ? { kind: 'breath', date: dateLabel(), rounds: (r.retentions || []).length, best: r.best, total: r.total }
-      : { kind: 'meditate', date: dateLabel(), duration: r.duration };
+      ? { kind: 'breath', at: Date.now(), rounds: (r.retentions || []).length, best: r.best, total: r.total }
+      : { kind: 'meditate', at: Date.now(), duration: r.duration };
     state.history = [entry, ...state.history];
     saveHistory(state.history);
   }
@@ -1665,7 +1655,8 @@ function boot() {
   audio.initVoices();
   audio.loadClips();
 
-  const done = localStorage.getItem(KEYS.onboarding) === 'true';
+  let done = false;
+  try { done = localStorage.getItem(KEYS.onboarding) === 'true'; } catch (e) {}
   state.screen = done ? 'main' : 'onboarding';
 
   const host = location.hostname;
